@@ -1,0 +1,85 @@
+{
+  description = "Julia + Python for Numerical Algorithm";
+
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+
+    pyproject-nix = {
+      url = "github:pyproject-nix/pyproject.nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    uv2nix = {
+      url = "github:pyproject-nix/uv2nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.pyproject-nix.follows = "pyproject-nix";
+    };
+
+    pyproject-build-systems = {
+      url = "github:pyproject-nix/build-system-pkgs";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.pyproject-nix.follows = "pyproject-nix";
+      inputs.uv2nix.follows = "uv2nix";
+    };
+  };
+
+  outputs =
+    {
+      self,
+      nixpkgs,
+      uv2nix,
+      pyproject-nix,
+      pyproject-build-systems,
+      ...
+    }:
+    let
+      system = "x86_64-linux";
+      pkgs = nixpkgs.legacyPackages.${system};
+      python = pkgs.python313;
+
+      workspace = uv2nix.lib.workspace.loadWorkspace { workspaceRoot = ./.; };
+
+      overlay = workspace.mkPyprojectOverlay {
+        sourcePreference = "wheel";
+      };
+
+      pythonSet = (pkgs.callPackage pyproject-nix.build.packages { inherit python; }).overrideScope (
+        nixpkgs.lib.composeManyExtensions [
+          pyproject-build-systems.overlays.default
+          overlay
+        ]
+      );
+
+      editableOverlay = workspace.mkEditablePyprojectOverlay { root = "$REPO_ROOT"; };
+
+      devPythonSet = pythonSet.overrideScope (nixpkgs.lib.composeManyExtensions [ editableOverlay ]);
+
+      virtualenv = devPythonSet.mkVirtualEnv "dev-env" workspace.deps.all;
+
+    in
+    {
+      devShells.${system}.default = pkgs.mkShell {
+        packages = [
+          virtualenv
+          pkgs.uv
+          pkgs.julia-bin # ✅ Add Julia
+        ];
+
+        env = {
+          UV_NO_SYNC = "1";
+          UV_PYTHON = python.interpreter;
+          UV_PYTHON_DOWNLOADS = "never";
+        };
+
+        shellHook = ''
+          unset PYTHONPATH
+          export REPO_ROOT=$(git rev-parse --show-toplevel)
+
+          echo "✅ uv2nix + Julia dev shell ready!"
+          echo "💡 Tip: To use Pluto.jl, run:"
+          echo "    julia -e 'import Pkg; Pkg.add(\"Pluto\"); import Pluto; Pluto.run()'"
+          echo ""
+        '';
+      };
+    };
+}
