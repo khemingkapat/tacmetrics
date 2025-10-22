@@ -74,11 +74,18 @@
         shellHook = ''
           unset PYTHONPATH
           export REPO_ROOT=$(git rev-parse --show-toplevel)
-
-          echo "✅ uv2nix + Julia dev shell ready!"
-          echo "💡 Tip: To use Pluto.jl, run:"
-          echo "    julia -e 'import Pkg; Pkg.add(\"Pluto\"); import Pluto; Pluto.run()'"
-          echo ""
+          rj() {
+            # Check if Project.toml and Manifest.toml exist in the current directory
+            if [[ -f "Project.toml" && -f "Manifest.toml" ]]; then
+              # If they exist, execute Julia with the project flag
+              echo "Activating project environment..."
+              julia --project=. "$@"
+            else
+              # Otherwise, execute Julia normally
+              echo "Running Julia in global environment..."
+              julia "$@"
+            fi
+          }
         '';
       };
     };
