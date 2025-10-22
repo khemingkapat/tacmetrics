@@ -1,5 +1,5 @@
 {
-  description = "Julia + Python for Numerical Algorithm";
+  description = "TacMetrics, collection of metrics to measure tactical game play style";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
