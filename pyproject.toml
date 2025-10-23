@@ -1,7 +1,7 @@
 [project]
 name = "tacmetrics"
 version = "0.1.0"
-description = "Add your description here"
+description = "Metrics of Tactical FPS Game from Data and Stats"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
