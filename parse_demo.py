@@ -10,7 +10,6 @@ def main():
             "Usage: python parse_demo_to_csv.py <path_to_demo.dem> [--to_parquet true|false]"
         )
         sys.exit(1)
-
     demo_path = sys.argv[1]
 
     # Default to False unless explicitly set
@@ -23,8 +22,13 @@ def main():
         print(f"Error: File '{demo_path}' not found.")
         sys.exit(1)
 
+    # Extract just the filename without extension
     demo_name = os.path.splitext(os.path.basename(demo_path))[0]
-    output_dir = os.path.join(os.getcwd(), demo_name)
+
+    # Create output dir next to the demo file (same level as input)
+    demo_dir = os.path.dirname(os.path.abspath(demo_path))
+    output_dir = os.path.join(demo_dir, demo_name)
+
     os.makedirs(output_dir, exist_ok=True)
 
     print(f"📦 Parsing demo: {demo_name}")
