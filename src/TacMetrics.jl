@@ -1,9 +1,11 @@
-
 module TacMetrics
 
-include("Transformer.jl")
+include("PathDecomposition/PathDecomposition.jl")
+using .PathDecomposition
 
-# You must re-export the function so users can access it after 'using TacMetrics'
-export transform_group, wide_transform
+export PathDecomposition
 
-end # module TacMetrics
+include("transformer.jl")
+export transform_coord, transform_coords, load_map_data
+
+end
