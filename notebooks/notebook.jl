@@ -14,7 +14,9 @@ begin
     using Revise
     
     # Now load your packages - changes will auto-update!
-    using CSV, DataFrames, Plots, Parquet2, TacMetrics, Plots
+    using CSV, DataFrames, Plots, Parquet2, Plots
+	using TacMetrics
+	using TacMetrics: PathDecomposition 
 end
 
 # ╔═╡ 8801b0fe-af4d-11f0-170b-972b2cf4deaa
@@ -26,7 +28,10 @@ md"""
 df = Parquet2.readfile("../demos/vitality-vs-the-mongolz-m2-dust2/ticks.parquet") |> DataFrame
 
 # ╔═╡ dc4d9def-d9c8-49d2-9780-7c52075a8578
-md"# Round and Side Selection"
+md"# Map, Round and Side Selection"
+
+# ╔═╡ e17b0c1f-4ae2-45da-886e-8813918ae711
+selected_map = "de_dust2"
 
 # ╔═╡ 17a61ab7-113d-4e4f-ac82-d4974141190d
 selected_round = 3
@@ -37,11 +42,22 @@ selected_side = "ct"
 # ╔═╡ 92cba50f-0b54-44bd-9809-739e8d1b958d
 selected_df = filter(row -> row.round_num == selected_round && row.side == selected_side, df, view=false)
 
+# ╔═╡ f00e9a30-0938-4c17-a733-4048ff36e1c6
+md"
+# Transform Coordinates
+"
+
+# ╔═╡ 7f3181f8-aa57-4be4-8795-c42b0daf791d
+map_data = TacMetrics.load_map_data(selected_map)
+
+# ╔═╡ 0f0306fd-520c-41e4-bfd9-7a7c05951f83
+transformed_df = TacMetrics.transform_coord(map_data,selected_df,x_col=:X,y_col=:Y)
+
 # ╔═╡ 9c7a6fca-e151-4583-a9da-89556a254e84
 md"# Transform DataFrames"
 
 # ╔═╡ 3890ab65-d19c-4178-b26f-854ac84defda
-wide_df = wide_transform(selected_df,:tick)
+wide_df = PathDecomposition.transform_wide(transformed_df,:tick)
 
 # ╔═╡ 26cfda01-43cb-4a70-a73b-5fc434915ffb
 md"
@@ -63,7 +79,7 @@ md"
 "
 
 # ╔═╡ b5ff756a-325c-41ef-a115-e652cc57ac26
-player_num = 1
+player_num = 5
 
 # ╔═╡ ed10fe60-02b3-45d6-9fa3-470577401cab
 begin
@@ -84,7 +100,7 @@ begin
 		colorbar = true,          # Ensures the color bar is displayed
     	xlabel = "P1 X-Coordinate", 
     	ylabel = "P1 Y-Coordinate", 
-    	title = "Player 1 Trajectory Colored by Tick", 
+    	title = "Player $(player_num) Trajectory Colored by Tick", 
     	legend = false, 
     	colorbar_title = "Game Tick",
 	)
@@ -95,9 +111,13 @@ end
 # ╟─8801b0fe-af4d-11f0-170b-972b2cf4deaa
 # ╠═d998d25c-658c-4b8c-9c7e-418fe5bf2f5e
 # ╟─dc4d9def-d9c8-49d2-9780-7c52075a8578
+# ╠═e17b0c1f-4ae2-45da-886e-8813918ae711
 # ╠═17a61ab7-113d-4e4f-ac82-d4974141190d
 # ╠═01c0dddd-cbf2-4dc3-afab-5718e603d434
 # ╠═92cba50f-0b54-44bd-9809-739e8d1b958d
+# ╟─f00e9a30-0938-4c17-a733-4048ff36e1c6
+# ╠═7f3181f8-aa57-4be4-8795-c42b0daf791d
+# ╠═0f0306fd-520c-41e4-bfd9-7a7c05951f83
 # ╟─9c7a6fca-e151-4583-a9da-89556a254e84
 # ╠═3890ab65-d19c-4178-b26f-854ac84defda
 # ╟─26cfda01-43cb-4a70-a73b-5fc434915ffb
