@@ -63,7 +63,7 @@ All new work (based on a User Story or task) must start on a new branch derived 
 ```
    git checkout main  
    git pull origin main  
-   git checkout \-b feature/new-feature-name
+   git checkout -b feature/new-feature-name
 ```
 2. **Commit:** Work on your new feature and commit changes often.  
 3. **Merge to Main:** When the feature is complete, tested, and ready, merge it back into main.
@@ -78,3 +78,4 @@ All new work (based on a User Story or task) must start on a new branch derived 
    git branch \-d feature/new-feature-name         # Delete local branch  
    git push origin \--delete feature/new-feature-name # Delete remote branch
 ```
+
