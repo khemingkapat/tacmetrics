@@ -14,9 +14,13 @@ begin
     using Revise
     
     # Now load your packages - changes will auto-update!
+    # Removed specific PathDecomposition import as functions are now top-level exports
     using CSV, DataFrames, Plots, Parquet2, Plots, Graphs, GraphRecipes, SimpleWeightedGraphs, Images, FileIO
 	using TacMetrics
-	using TacMetrics: PathDecomposition 
+	
+    # Removed explicit PathDecomposition: PathDecomposition import.
+    # Functions are now imported directly from TacMetrics.
+    # e.g., TacMetrics.PathDecomposition.select_single_player is now select_single_player
 end
 
 # ╔═╡ 8801b0fe-af4d-11f0-170b-972b2cf4deaa
@@ -57,7 +61,8 @@ transformed_df = TacMetrics.transform_coord(map_data,selected_df,x_col=:X,y_col=
 md"# Transform DataFrames"
 
 # ╔═╡ 3890ab65-d19c-4178-b26f-854ac84defda
-wide_df = PathDecomposition.transform_wide(transformed_df,:tick)
+# Uses the exported `transform_wide` function, which is now a top-level export
+wide_df = transform_wide(transformed_df,:tick)
 
 # ╔═╡ 26cfda01-43cb-4a70-a73b-5fc434915ffb
 md"
@@ -79,7 +84,8 @@ md"
 "
 
 # ╔═╡ b5ff756a-325c-41ef-a115-e652cc57ac26
-player_num = 5
+player_num = 
+5
 
 # ╔═╡ ed10fe60-02b3-45d6-9fa3-470577401cab
 begin
@@ -100,7 +106,8 @@ begin
 		colorbar = true,          # Ensures the color bar is displayed
     	xlabel = "P1 X-Coordinate", 
     	ylabel = "P1 Y-Coordinate", 
-    	title = "Player $(player_num) Trajectory Colored by Tick", 
+    	title = "Player $(player_num) Trajectory Colored 
+by Tick", 
     	legend = false, 
     	colorbar_title = "Game Tick",
 	)
@@ -115,23 +122,11 @@ md"
 sampled_df
 
 # ╔═╡ 775de0d3-37b9-46aa-8379-0002eefc3c33
-function select_single_player(df::DataFrame, num::Int)
-    x_col_name = Symbol("p", num, "x")
-    y_col_name = Symbol("p", num, "y")
-
-    required_cols = string.([:tick, x_col_name, y_col_name])
-    
-    if !all(col -> col in names(df), required_cols)
-        error("One or more required columns (:$x_col_name, :$y_col_name) for point $num do not exist in the input DataFrame.")
-    end
-
-    new_df = select(df, :tick, x_col_name, y_col_name)
-
-    return new_df
-end
+# REMOVED custom function definition, now uses TacMetrics.select_single_player
 
 # ╔═╡ 170da4f9-26bd-4eb8-99d3-8dc3cce4ead2
-player_df = select_single_player(sampled_df,4)
+# Uses the exported `select_single_player` function
+player_df = select_single_player(sampled_df, 4)
 
 # ╔═╡ 706da211-86f7-4605-a8d0-5fae73f25906
 n = nrow(player_df)
@@ -140,9 +135,12 @@ n = nrow(player_df)
 begin
     t_max_tick = 150
     d_max = 20      
+    alpha = 10
+	beta = 0.5
 end
 
 # ╔═╡ f3bce198-f52f-4e08-9a43-e71cb85fea35
+# Extracts coordinates to local variables for visualization cells
 begin
     # x = column -2, y = column -1
     x = Float64.(player_df[!, end-1])
@@ -151,30 +149,20 @@ begin
 end
 
 # ╔═╡ 024600b3-2a33-4eaa-bb52-38752843b89c
-dist(i::Int, j::Int) = hypot(x[i] - x[j], y[i] - y[j])
+# REMOVED unnecessary local function definition
 
 # ╔═╡ 6c6592f4-ecca-415c-983c-0e66f3209e80
+# REPLACED graph construction with a single call to the exported function
 begin
-    g = SimpleWeightedDiGraph{Int64, Float64}(n)
-	alpha = 10
-	beta=0.5
-
-    for i in 1:n
-        ti = player_df.tick[i]
-	
-        for j in (i+1):n
-            dt_tick = player_df.tick[j] - ti
-            # stop once time window exceeded
-            dt_tick > t_max_tick && break
-			d_ij = dist(i, j)
-
-            if d_ij ≤ d_max
-				w_ij = alpha * d_ij + beta * dt_tick
-                add_edge!(g, i, j, w_ij)
-            end
-        end
-    end
-    g
+    # Call the encapsulated function and capture the graph (g) and the path (path)
+    g,path = decompose_path(
+        player_df, 
+        t_max_tick=t_max_tick, 
+        d_max=d_max, 
+        alpha=alpha, 
+        beta=beta
+    )
+    path # Pluto display output for the graph object
 end
 
 
@@ -191,6 +179,7 @@ begin
         title = "Directed movement graph"
     )
 
+    # Note: 'g' is the variable returned by the new find_optimal_path call
     for e in edges(g)
         i = src(e)
         j = dst(e)
@@ -211,10 +200,10 @@ end
 
 
 # ╔═╡ dd2952c1-cd15-4ab3-af61-266dc5afd0ab
-distances = dijkstra_shortest_paths(g, 1)
+# REMOVED redundant pathfinding calls, 'path' is already defined in the decomposition cell
 
 # ╔═╡ 6fd17f4d-0adb-43de-b9fd-bb71871e9cc8
-path = enumerate_paths(distances, n)
+# REMOVED redundant path enumeration, 'path' is already defined in the decomposition cell
 
 # ╔═╡ ab6ed8ab-b70b-4535-abe0-82e6ddc628f7
 begin
