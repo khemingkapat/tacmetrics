@@ -13,6 +13,5 @@ wheels/
 *.dem
 */**/*.parquet
 *.parquet
-*/**/
 
 /Manifest.toml
