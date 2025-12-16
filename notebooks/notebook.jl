@@ -38,7 +38,7 @@ md"# Map, Round and Side Selection"
 selected_map = "de_dust2"
 
 # ╔═╡ 17a61ab7-113d-4e4f-ac82-d4974141190d
-selected_round = 2
+selected_round = 3
 
 # ╔═╡ 01c0dddd-cbf2-4dc3-afab-5718e603d434
 selected_side = "ct"
@@ -84,7 +84,7 @@ md"
 "
 
 # ╔═╡ b5ff756a-325c-41ef-a115-e652cc57ac26
-player_num = 3
+player_num = 4
 
 # ╔═╡ ed10fe60-02b3-45d6-9fa3-470577401cab
 begin
@@ -288,11 +288,11 @@ end
 distances
 
 # ╔═╡ 865d979d-8c5f-4658-82d7-c2575ab02c4e
-function process_distances(distances,max_fault = 2)
+function process_distances(distances,max_fault = 2,mean_multiplier=1)
     n = length(distances)
     n == 0 && return UnitRange{Int}[]
 
-    mean_distance = mean(distances)
+    mean_distance = mean(distances)*mean_multiplier
     segments = UnitRange{Int}[]
 
     in_segment = false
@@ -339,16 +339,90 @@ distances
 segments = process_distances(distances,2)
 
 # ╔═╡ f003052e-f148-4ff2-b20a-9b9f5c9c71ea
-# ╠═╡ disabled = true
-#=╠═╡
 for segment in segments
 	println(segment, " ",distances[segment])
 end
-  ╠═╡ =#
 
 # ╔═╡ a49ca75f-0a05-4d9f-8e3c-270d504b544b
 for segment in segments
 	println(segment, " ",path[segment])
+end
+
+# ╔═╡ 8b7bba1b-91ea-40b5-a42f-40249b3586af
+begin
+    new_path = Int[]
+    segment_idx = 1
+    n_segment = length(segments)
+
+    in_segment = false
+    idx = 1
+    while idx <= length(path)
+
+        if (segment_idx <= n_segment) && idx == segments[segment_idx].start
+            if isempty(new_path) || last(new_path) != path[idx]
+                push!(new_path, path[idx])
+            end
+            in_segment = true
+            idx += 1
+            continue
+        end
+
+        if (segment_idx <= n_segment) && idx == segments[segment_idx].stop
+            in_segment = false
+            if segments[segment_idx].stop + 1 <= length(path)
+                if last(new_path) != path[segments[segment_idx].stop + 1]
+                    push!(new_path, path[segments[segment_idx].stop + 1])
+                end
+            end
+            segment_idx += 1
+            idx += 2
+            continue
+        end
+
+        if !in_segment
+            if isempty(new_path) || last(new_path) != path[idx]
+                push!(new_path, path[idx])
+            end
+        end
+
+        idx += 1
+    end
+
+    new_path
+end
+
+
+# ╔═╡ 14393a9a-5e83-439b-a2ac-5927c105f0e5
+begin
+    # Recalculate coordinates for the new path
+	new_path_x = x[new_path]
+	new_path_y = y[new_path]
+
+	bgp_compressed = plot(load("../.awpy/maps/$(selected_map).png"),
+           yflip=true,          
+           aspect_ratio=:equal,
+           legend=false,
+			size=(1000,1000),
+			title = "Compressed Path"
+		)
+	xlims!(bgp_compressed, 0, img_dim)
+	ylims!(bgp_compressed, 0, img_dim)
+	scatter!(
+		bgp_compressed,
+        x, img_dim.-y,
+        markersize = 3,
+		markercolor="lightblue",
+        aspect_ratio = :equal,
+        legend = false,
+    )
+    
+	plot!(
+    	bgp_compressed, 
+    	new_path_x, 
+    	img_dim.-new_path_y, 
+    	line = (:red, 3, :solid), # Thicker red line for the new path
+    	label = "Compressed Path"
+	)
 end
 
 # ╔═╡ Cell order:
@@ -394,3 +468,5 @@ end
 # ╠═66809b7e-4dc9-4591-a952-f4d1f91aaaee
 # ╠═f003052e-f148-4ff2-b20a-9b9f5c9c71ea
 # ╠═a49ca75f-0a05-4d9f-8e3c-270d504b544b
+# ╠═8b7bba1b-91ea-40b5-a42f-40249b3586af
+# ╠═14393a9a-5e83-439b-a2ac-5927c105f0e5
