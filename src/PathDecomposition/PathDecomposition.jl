@@ -38,10 +38,10 @@ Returns: A tuple containing the constructed SimpleWeightedDiGraph and
 """
 function decompose_path(
     player_df::AbstractDataFrame;
-    t_max_tick::Int=150,
+    t_max_tick::Int=50,
     d_max::Real=20.0,
-    alpha::Real=10.0,
-    beta::Real=0.5
+    alpha::Real=1.0,
+    beta::Real=1.0
 )::Tuple{SimpleWeightedDiGraph,Vector{Int}} # <- FIXED: Returns a Tuple
 
     n = nrow(player_df)
@@ -56,10 +56,13 @@ function decompose_path(
     ticks = player_df[!, :tick]
 
     # Helper function for distance
-    dist(i::Int, j::Int) = hypot(x[i] - x[j], y[i] - y[j])
+
+    dist(i::Int, j::Int) = hypot(x[i] - x[j], y[i] - y[j]) #
 
     # 2. Build the Weighted Directed Graph
     g = SimpleWeightedDiGraph{Int64,Float64}(n)
+
+    # Define a tiny number (epsilon) to prevent division by zero
 
     for i in 1:n
         ti = ticks[i]
@@ -68,14 +71,20 @@ function decompose_path(
             dt_tick = ticks[j] - ti
 
             # Stop once time window exceeded
-            dt_tick > t_max_tick && break
+            dt_tick > t_max_tick && break #
 
             d_ij = dist(i, j)
 
             if d_ij ≤ d_max
-                # Cost function: w_ij = alpha * d_ij + beta * dt_tick
-                w_ij = alpha * d_ij + beta * dt_tick
-                add_edge!(g, i, j, w_ij)
+                # Calculate the raw combined cost (Distance + Time Jump)
+                raw_cost = alpha * d_ij + beta * dt_tick
+
+                # Apply the inverse cost function: 1 / (raw_cost + epsilon)
+                # The small EPSILON prevents division by zero.
+                w_ij = 1.0 / (raw_cost + 1e-16)
+
+                add_edge!(g, i,
+                    j, w_ij) #
             end
         end
     end
