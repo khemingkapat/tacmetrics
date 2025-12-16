@@ -38,7 +38,7 @@ md"# Map, Round and Side Selection"
 selected_map = "de_dust2"
 
 # ╔═╡ 17a61ab7-113d-4e4f-ac82-d4974141190d
-selected_round = 3
+selected_round = 2
 
 # ╔═╡ 01c0dddd-cbf2-4dc3-afab-5718e603d434
 selected_side = "ct"
@@ -84,8 +84,7 @@ md"
 "
 
 # ╔═╡ b5ff756a-325c-41ef-a115-e652cc57ac26
-player_num = 
-5
+player_num = 3
 
 # ╔═╡ ed10fe60-02b3-45d6-9fa3-470577401cab
 begin
@@ -121,22 +120,38 @@ md"
 # ╔═╡ a7fe237b-6212-4e1f-9da2-0241eb69c294
 sampled_df
 
-# ╔═╡ 775de0d3-37b9-46aa-8379-0002eefc3c33
-# REMOVED custom function definition, now uses TacMetrics.select_single_player
-
 # ╔═╡ 170da4f9-26bd-4eb8-99d3-8dc3cce4ead2
 # Uses the exported `select_single_player` function
-player_df = select_single_player(sampled_df, 4)
+all_player_df = select_single_player(sampled_df, player_num)
+
+# ╔═╡ 079a0c3a-f387-446f-bc00-c154b237db4b
+begin
+	x_prev = vcat(missing, all_player_df[1:end-1,end-1])
+	y_prev = vcat(missing, all_player_df[1:end-1,end])
+
+	moved = (all_player_df[:,end-1] .!= x_prev) .|
+        (all_player_df[:,end] .!= y_prev)
+	
+	moved = coalesce.(moved, false)
+	first_move_idx = findfirst(moved)
+
+	last_move_idx = length(moved) - findfirst(reverse(moved)) + 1
+	last_move_idx = max(1, last_move_idx) 
+
+
+	player_df = all_player_df[first_move_idx-1:last_move_idx, :]
+
+end
 
 # ╔═╡ 706da211-86f7-4605-a8d0-5fae73f25906
 n = nrow(player_df)
 
 # ╔═╡ 2c301874-08a2-4c83-b503-eab753f7e7cb
 begin
-    t_max_tick = 150
-    d_max = 20      
-    alpha = 10
-	beta = 0.5
+    t_max_tick = 50
+    d_max = 30.0     # Changed from 20 to 20.0
+    alpha = 1 # Changed from 10 to 10.0
+	beta = 1
 end
 
 # ╔═╡ f3bce198-f52f-4e08-9a43-e71cb85fea35
@@ -147,9 +162,6 @@ begin
     y = Float64.(player_df[!, end])
 
 end
-
-# ╔═╡ 024600b3-2a33-4eaa-bb52-38752843b89c
-# REMOVED unnecessary local function definition
 
 # ╔═╡ 6c6592f4-ecca-415c-983c-0e66f3209e80
 # REPLACED graph construction with a single call to the exported function
@@ -162,7 +174,7 @@ begin
         alpha=alpha, 
         beta=beta
     )
-    path # Pluto display output for the graph object
+    path # Pluto display output for 	the graph object
 end
 
 
@@ -198,12 +210,6 @@ begin
     p   # ← THIS is critical
 end
 
-
-# ╔═╡ dd2952c1-cd15-4ab3-af61-266dc5afd0ab
-# REMOVED redundant pathfinding calls, 'path' is already defined in the decomposition cell
-
-# ╔═╡ 6fd17f4d-0adb-43de-b9fd-bb71871e9cc8
-# REMOVED redundant path enumeration, 'path' is already defined in the decomposition cell
 
 # ╔═╡ ab6ed8ab-b70b-4535-abe0-82e6ddc628f7
 begin
@@ -250,6 +256,101 @@ begin
 end
 
 
+# ╔═╡ 68084c51-12d1-488d-86ca-9a34518dd425
+coords = collect(zip(path_x,path_y))
+
+# ╔═╡ 46fa1f03-cdb0-4cb9-a8b2-c59cc9b96889
+begin
+	distances = []
+	for idx in 2:size(coords,1)
+		x_prev,y_prev = coords[idx-1]
+		x,y = coords[idx]
+		push!(distances,hypot(x-x_prev,y-y_prev))
+	end
+	distances
+end
+
+# ╔═╡ 4942826a-0466-4d07-bbb8-123a9d3b091d
+begin
+	using Statistics
+	plot(1:length(distances), distances, 
+	     xlabel="Segment Index", 
+	     ylabel="Distance", 
+	     title="Segment Distances",
+			grid=true,)
+	mean_distance = mean(distances)
+	hline!([mean_distance], 
+       line=(:dash, 2, :red),
+       label="Mean Distance ($(round(mean_distance, digits=2)))")
+end
+
+# ╔═╡ 46b55875-1d6c-4c7e-a56c-3c290b90d203
+distances
+
+# ╔═╡ 865d979d-8c5f-4658-82d7-c2575ab02c4e
+function process_distances(distances,max_fault = 2)
+    n = length(distances)
+    n == 0 && return UnitRange{Int}[]
+
+    mean_distance = mean(distances)
+    segments = UnitRange{Int}[]
+
+    in_segment = false
+    start_idx = 0
+    fault = 0
+
+    for i in 1:n
+        if distances[i] < mean_distance
+            if !in_segment
+                start_idx = i
+                in_segment = true
+            end
+            fault = 0
+        else
+            if in_segment
+                fault += 1
+                if fault > max_fault
+                    end_idx = i - fault
+                    if end_idx >= start_idx + max_fault
+                        push!(segments, start_idx:end_idx)
+                    end
+                    in_segment = false
+                    fault = 0
+                end
+            end
+        end
+    end
+
+    if in_segment
+        end_idx = n - fault
+        if end_idx >= start_idx+max_fault
+            push!(segments, start_idx:end_idx)
+        end
+    end
+
+    return segments
+end
+
+
+# ╔═╡ bb9704e7-c2b7-4ac7-a5a0-501b7e79e906
+distances
+
+# ╔═╡ 66809b7e-4dc9-4591-a952-f4d1f91aaaee
+segments = process_distances(distances,2)
+
+# ╔═╡ f003052e-f148-4ff2-b20a-9b9f5c9c71ea
+# ╠═╡ disabled = true
+#=╠═╡
+for segment in segments
+	println(segment, " ",distances[segment])
+end
+  ╠═╡ =#
+
+# ╔═╡ a49ca75f-0a05-4d9f-8e3c-270d504b544b
+for segment in segments
+	println(segment, " ",path[segment])
+end
+
 # ╔═╡ Cell order:
 # ╠═0c3555e8-b38b-4278-bef0-03b77d2c3703
 # ╟─8801b0fe-af4d-11f0-170b-972b2cf4deaa
@@ -273,17 +374,23 @@ end
 # ╠═ed10fe60-02b3-45d6-9fa3-470577401cab
 # ╟─03ea4413-41c3-4f57-bba5-37f69be69b56
 # ╠═a7fe237b-6212-4e1f-9da2-0241eb69c294
-# ╠═775de0d3-37b9-46aa-8379-0002eefc3c33
 # ╠═170da4f9-26bd-4eb8-99d3-8dc3cce4ead2
+# ╠═079a0c3a-f387-446f-bc00-c154b237db4b
 # ╠═706da211-86f7-4605-a8d0-5fae73f25906
 # ╠═2c301874-08a2-4c83-b503-eab753f7e7cb
 # ╠═f3bce198-f52f-4e08-9a43-e71cb85fea35
-# ╠═024600b3-2a33-4eaa-bb52-38752843b89c
 # ╠═6c6592f4-ecca-415c-983c-0e66f3209e80
 # ╠═8367e60c-44e2-4c48-bf3f-584641ca00ab
 # ╠═ebdf6c80-063e-44f6-9dae-36bcff05dd4d
-# ╠═dd2952c1-cd15-4ab3-af61-266dc5afd0ab
-# ╠═6fd17f4d-0adb-43de-b9fd-bb71871e9cc8
 # ╠═ab6ed8ab-b70b-4535-abe0-82e6ddc628f7
 # ╠═9145376d-ff52-4142-aedd-4e2bc81e832f
 # ╠═c8a7079b-c1fb-4433-a19f-ec909f6b38ee
+# ╠═68084c51-12d1-488d-86ca-9a34518dd425
+# ╠═46fa1f03-cdb0-4cb9-a8b2-c59cc9b96889
+# ╠═46b55875-1d6c-4c7e-a56c-3c290b90d203
+# ╠═4942826a-0466-4d07-bbb8-123a9d3b091d
+# ╠═865d979d-8c5f-4658-82d7-c2575ab02c4e
+# ╠═bb9704e7-c2b7-4ac7-a5a0-501b7e79e906
+# ╠═66809b7e-4dc9-4591-a952-f4d1f91aaaee
+# ╠═f003052e-f148-4ff2-b20a-9b9f5c9c71ea
+# ╠═a49ca75f-0a05-4d9f-8e3c-270d504b544b
