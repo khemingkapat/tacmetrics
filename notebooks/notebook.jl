@@ -14,13 +14,15 @@ begin
     using Revise
     
     # Now load your packages - changes will auto-update!
-    # Removed specific PathDecomposition import as functions are now top-level exports
     using CSV, DataFrames, Plots, Parquet2, Plots, Graphs, GraphRecipes, SimpleWeightedGraphs, Images, FileIO
-	using TacMetrics
 	
-    # Removed explicit PathDecomposition: PathDecomposition import.
-    # Functions are now imported directly from TacMetrics.
-    # e.g., TacMetrics.PathDecomposition.select_single_player is now select_single_player
+    # NOTE: Statistics is required for plotting the mean distance, but the 
+    # process_distances function in the package also relies on it implicitly.
+    # We explicitly import it here for the plotting cell.
+    using Statistics 
+    
+    # Import TacMetrics, which re-exports all PathDecomposition functions
+	using TacMetrics
 end
 
 # ╔═╡ 8801b0fe-af4d-11f0-170b-972b2cf4deaa
@@ -61,8 +63,8 @@ transformed_df = TacMetrics.transform_coord(map_data,selected_df,x_col=:X,y_col=
 md"# Transform DataFrames"
 
 # ╔═╡ 3890ab65-d19c-4178-b26f-854ac84defda
-# Uses the exported `transform_wide` function, which is now a top-level export
-wide_df = transform_wide(transformed_df,:tick)
+# Uses the exported `transform_wide` function from TacMetrics
+wide_df = TacMetrics.transform_wide(transformed_df,:tick)
 
 # ╔═╡ 26cfda01-43cb-4a70-a73b-5fc434915ffb
 md"
@@ -105,8 +107,7 @@ begin
 		colorbar = true,          # Ensures the color bar is displayed
     	xlabel = "P1 X-Coordinate", 
     	ylabel = "P1 Y-Coordinate", 
-    	title = "Player $(player_num) Trajectory Colored 
-by Tick", 
+    	title = "Player $(player_num) Trajectory Colored by Tick", 
     	legend = false, 
     	colorbar_title = "Game Tick",
 	)
@@ -114,34 +115,19 @@ end
 
 # ╔═╡ 03ea4413-41c3-4f57-bba5-37f69be69b56
 md"
-# Decompose
+# Decompose & Compress Path
 "
 
 # ╔═╡ a7fe237b-6212-4e1f-9da2-0241eb69c294
 sampled_df
 
 # ╔═╡ 170da4f9-26bd-4eb8-99d3-8dc3cce4ead2
-# Uses the exported `select_single_player` function
-all_player_df = select_single_player(sampled_df, player_num)
+# STEP 1: Select single player data (using exported package function)
+all_player_df = TacMetrics.select_single_player(sampled_df, player_num)
 
 # ╔═╡ 079a0c3a-f387-446f-bc00-c154b237db4b
-begin
-	x_prev = vcat(missing, all_player_df[1:end-1,end-1])
-	y_prev = vcat(missing, all_player_df[1:end-1,end])
-
-	moved = (all_player_df[:,end-1] .!= x_prev) .|
-        (all_player_df[:,end] .!= y_prev)
-	
-	moved = coalesce.(moved, false)
-	first_move_idx = findfirst(moved)
-
-	last_move_idx = length(moved) - findfirst(reverse(moved)) + 1
-	last_move_idx = max(1, last_move_idx) 
-
-
-	player_df = all_player_df[first_move_idx-1:last_move_idx, :]
-
-end
+# STEP 2: Trim stationary periods (using exported package function)
+player_df = TacMetrics.trim_trajectory(all_player_df)
 
 # ╔═╡ 706da211-86f7-4605-a8d0-5fae73f25906
 n = nrow(player_df)
@@ -149,9 +135,9 @@ n = nrow(player_df)
 # ╔═╡ 2c301874-08a2-4c83-b503-eab753f7e7cb
 begin
     t_max_tick = 50
-    d_max = 30.0     # Changed from 20 to 20.0
-    alpha = 1 # Changed from 10 to 10.0
-	beta = 1
+    d_max = 30.0     
+    alpha = 1 # Weight for distance
+	beta = 1 # Weight for time
 end
 
 # ╔═╡ f3bce198-f52f-4e08-9a43-e71cb85fea35
@@ -160,21 +146,20 @@ begin
     # x = column -2, y = column -1
     x = Float64.(player_df[!, end-1])
     y = Float64.(player_df[!, end])
-
 end
 
 # ╔═╡ 6c6592f4-ecca-415c-983c-0e66f3209e80
-# REPLACED graph construction with a single call to the exported function
+# STEP 3: Decompose path (using exported package function)
 begin
-    # Call the encapsulated function and capture the graph (g) and the path (path)
-    g,path = decompose_path(
+    # Call the exported function and capture the graph (g) and the path (path)
+    g, path = TacMetrics.decompose_path(
         player_df, 
         t_max_tick=t_max_tick, 
         d_max=d_max, 
         alpha=alpha, 
         beta=beta
     )
-    path # Pluto display output for 	the graph object
+    path # Pluto display output for the path vector
 end
 
 
@@ -191,7 +176,7 @@ begin
         title = "Directed movement graph"
     )
 
-    # Note: 'g' is the variable returned by the new find_optimal_path call
+    # Note: 'g' is the variable returned by the new decompose_path call
     for e in edges(g)
         i = src(e)
         j = dst(e)
@@ -255,88 +240,36 @@ begin
 	)
 end
 
-
 # ╔═╡ 68084c51-12d1-488d-86ca-9a34518dd425
+# Coordinates of the optimal path
 coords = collect(zip(path_x,path_y))
 
 # ╔═╡ 46fa1f03-cdb0-4cb9-a8b2-c59cc9b96889
-begin
-	distances = []
-	for idx in 2:size(coords,1)
-		x_prev,y_prev = coords[idx-1]
-		x,y = coords[idx]
-		push!(distances,hypot(x-x_prev,y-y_prev))
-	end
-	distances
-end
+# STEP 4: Calculate segment distances (using exported package function)
+distances = TacMetrics.calculate_segment_distances(path, player_df)
+
+# ╔═╡ 46b55875-1d6c-4c7e-a56c-3c290b90d203
+distances
 
 # ╔═╡ 4942826a-0466-4d07-bbb8-123a9d3b091d
 begin
-	using Statistics
 	plot(1:length(distances), distances, 
 	     xlabel="Segment Index", 
 	     ylabel="Distance", 
 	     title="Segment Distances",
 			grid=true,)
-	mean_distance = mean(distances)
+	mean_distance = Statistics.mean(distances)
 	hline!([mean_distance], 
        line=(:dash, 2, :red),
        label="Mean Distance ($(round(mean_distance, digits=2)))")
 end
 
-# ╔═╡ 46b55875-1d6c-4c7e-a56c-3c290b90d203
-distances
-
-# ╔═╡ 865d979d-8c5f-4658-82d7-c2575ab02c4e
-function process_distances(distances,max_fault = 2,mean_multiplier=1)
-    n = length(distances)
-    n == 0 && return UnitRange{Int}[]
-
-    mean_distance = mean(distances)*mean_multiplier
-    segments = UnitRange{Int}[]
-
-    in_segment = false
-    start_idx = 0
-    fault = 0
-
-    for i in 1:n
-        if distances[i] < mean_distance
-            if !in_segment
-                start_idx = i
-                in_segment = true
-            end
-            fault = 0
-        else
-            if in_segment
-                fault += 1
-                if fault > max_fault
-                    end_idx = i - fault
-                    if end_idx >= start_idx + max_fault
-                        push!(segments, start_idx:end_idx)
-                    end
-                    in_segment = false
-                    fault = 0
-                end
-            end
-        end
-    end
-
-    if in_segment
-        end_idx = n - fault
-        if end_idx >= start_idx+max_fault
-            push!(segments, start_idx:end_idx)
-        end
-    end
-
-    return segments
-end
-
-
 # ╔═╡ bb9704e7-c2b7-4ac7-a5a0-501b7e79e906
 distances
 
 # ╔═╡ 66809b7e-4dc9-4591-a952-f4d1f91aaaee
-segments = process_distances(distances,2,1)
+# STEP 5: Identify low-movement segments (using exported package function)
+segments = TacMetrics.process_distances(distances, 2, 1)
 
 # ╔═╡ f003052e-f148-4ff2-b20a-9b9f5c9c71ea
 for segment in segments
@@ -348,64 +281,9 @@ for segment in segments
 	println(segment, " ",path[segment])
 end
 
-# ╔═╡ cedb3d01-f966-45b2-bce8-749995886f21
-function process_path(path::Vector{Int}, segments, player_df::DataFrame)
-
-    filtered_rows = [] 
-    
-    segment_idx = 1
-    n_segment = length(segments)
-
-    last_path_index_added = -1 
-
-    idx = 1
-    while idx <= length(path)
-        current_index = path[idx]
-
-        if (segment_idx <= n_segment) && (idx == segments[segment_idx].start)
-            if last_path_index_added != current_index
-                # push!(filtered_rows, player_df[current_index, :])
-                last_path_index_added = current_index
-            end
-
-            idx = segments[segment_idx].stop + 1
-            continue
-        end
-
-        if (segment_idx <= n_segment) && (idx == segments[segment_idx].stop)
-            segment = segments[segment_idx]
-
-            segment_data = player_df[path[segment.start:segment.stop], :]
-            segment_row = combine(segment_data, All() .=> mean; renamecols=false) 
-
-            push!(filtered_rows, segment_row[1, :]) 
-            
-           
-            if current_index != last_path_index_added
-                push!(filtered_rows, player_df[current_index, :])
-                last_path_index_added = current_index
-            end
-            
-            segment_idx += 1
-            idx += 1
-            continue
-        end
-
-        if last_path_index_added != current_index
-            push!(filtered_rows, player_df[current_index, :]) 
-            last_path_index_added = current_index
-        end
-
-        idx += 1
-    end
-
-    filtered_player_df = DataFrame(filtered_rows)
-    
-    return filtered_player_df
-end
-
 # ╔═╡ d0c6e073-246e-41a3-b13a-0c8bbf0f1178
-filtered_player_df = process_path(path,segments,player_df)
+# STEP 6: Compress the path (using exported package function)
+filtered_player_df = TacMetrics.process_path(path, segments, player_df)
 
 # ╔═╡ 14393a9a-5e83-439b-a2ac-5927c105f0e5
 begin
@@ -441,20 +319,8 @@ begin
 end
 
 # ╔═╡ b5acfea7-0ad5-4d9a-b3df-c1b30965c323
-begin
-	n_nodes = nrow(filtered_player_df)
-	
-	g_compressed = SimpleWeightedDiGraph(n_nodes)
-	
-	for i in 1:(n_nodes - 1)
-	    source_node = i
-	    target_node = i + 1
-	    
-	    weight = filtered_player_df.tick[i+1] - filtered_player_df.tick[i]
-	    add_edge!(g_compressed, source_node, target_node, weight)
-	end
-	g_compressed
-end
+# STEP 7: Build compressed graph (using exported package function)
+g_compressed = TacMetrics.build_compressed_graph(filtered_player_df)
 
 # ╔═╡ f18376cc-1e05-4ef4-a435-b20e67d6dfd9
 plot(1:nrow(filtered_player_df),filtered_player_df.tick)
@@ -497,12 +363,10 @@ plot(1:nrow(filtered_player_df),filtered_player_df.tick)
 # ╠═46fa1f03-cdb0-4cb9-a8b2-c59cc9b96889
 # ╠═46b55875-1d6c-4c7e-a56c-3c290b90d203
 # ╠═4942826a-0466-4d07-bbb8-123a9d3b091d
-# ╠═865d979d-8c5f-4658-82d7-c2575ab02c4e
 # ╠═bb9704e7-c2b7-4ac7-a5a0-501b7e79e906
 # ╠═66809b7e-4dc9-4591-a952-f4d1f91aaaee
 # ╠═f003052e-f148-4ff2-b20a-9b9f5c9c71ea
 # ╠═a49ca75f-0a05-4d9f-8e3c-270d504b544b
-# ╠═cedb3d01-f966-45b2-bce8-749995886f21
 # ╠═d0c6e073-246e-41a3-b13a-0c8bbf0f1178
 # ╠═14393a9a-5e83-439b-a2ac-5927c105f0e5
 # ╠═b5acfea7-0ad5-4d9a-b3df-c1b30965c323
