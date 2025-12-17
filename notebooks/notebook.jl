@@ -336,7 +336,7 @@ end
 distances
 
 # ╔═╡ 66809b7e-4dc9-4591-a952-f4d1f91aaaee
-segments = process_distances(distances,2)
+segments = process_distances(distances,2,1)
 
 # ╔═╡ f003052e-f148-4ff2-b20a-9b9f5c9c71ea
 for segment in segments
@@ -348,55 +348,70 @@ for segment in segments
 	println(segment, " ",path[segment])
 end
 
-# ╔═╡ 8b7bba1b-91ea-40b5-a42f-40249b3586af
-begin
-    new_path = Int[]
+# ╔═╡ cedb3d01-f966-45b2-bce8-749995886f21
+function process_path(path::Vector{Int}, segments, player_df::DataFrame)
+
+    filtered_rows = [] 
+    
     segment_idx = 1
     n_segment = length(segments)
 
-    in_segment = false
+    last_path_index_added = -1 
+
     idx = 1
     while idx <= length(path)
+        current_index = path[idx]
 
-        if (segment_idx <= n_segment) && idx == segments[segment_idx].start
-            if isempty(new_path) || last(new_path) != path[idx]
-                push!(new_path, path[idx])
+        if (segment_idx <= n_segment) && (idx == segments[segment_idx].start)
+            if last_path_index_added != current_index
+                # push!(filtered_rows, player_df[current_index, :])
+                last_path_index_added = current_index
             end
-            in_segment = true
+
+            idx = segments[segment_idx].stop + 1
+            continue
+        end
+
+        if (segment_idx <= n_segment) && (idx == segments[segment_idx].stop)
+            segment = segments[segment_idx]
+
+            segment_data = player_df[path[segment.start:segment.stop], :]
+            segment_row = combine(segment_data, All() .=> mean; renamecols=false) 
+
+            push!(filtered_rows, segment_row[1, :]) 
+            
+           
+            if current_index != last_path_index_added
+                push!(filtered_rows, player_df[current_index, :])
+                last_path_index_added = current_index
+            end
+            
+            segment_idx += 1
             idx += 1
             continue
         end
 
-        if (segment_idx <= n_segment) && idx == segments[segment_idx].stop
-            in_segment = false
-            if segments[segment_idx].stop + 1 <= length(path)
-                if last(new_path) != path[segments[segment_idx].stop + 1]
-                    push!(new_path, path[segments[segment_idx].stop + 1])
-                end
-            end
-            segment_idx += 1
-            idx += 2
-            continue
-        end
-
-        if !in_segment
-            if isempty(new_path) || last(new_path) != path[idx]
-                push!(new_path, path[idx])
-            end
+        if last_path_index_added != current_index
+            push!(filtered_rows, player_df[current_index, :]) 
+            last_path_index_added = current_index
         end
 
         idx += 1
     end
 
-    new_path
+    filtered_player_df = DataFrame(filtered_rows)
+    
+    return filtered_player_df
 end
 
+# ╔═╡ d0c6e073-246e-41a3-b13a-0c8bbf0f1178
+filtered_player_df = process_path(path,segments,player_df)
 
 # ╔═╡ 14393a9a-5e83-439b-a2ac-5927c105f0e5
 begin
     # Recalculate coordinates for the new path
-	new_path_x = x[new_path]
-	new_path_y = y[new_path]
+	new_path_x = filtered_player_df[:,end-1]
+	new_path_y = filtered_player_df[:,end]
 
 	bgp_compressed = plot(load("../.awpy/maps/$(selected_map).png"),
            yflip=true,          
@@ -424,6 +439,25 @@ begin
     	label = "Compressed Path"
 	)
 end
+
+# ╔═╡ b5acfea7-0ad5-4d9a-b3df-c1b30965c323
+begin
+	n_nodes = nrow(filtered_player_df)
+	
+	g_compressed = SimpleWeightedDiGraph(n_nodes)
+	
+	for i in 1:(n_nodes - 1)
+	    source_node = i
+	    target_node = i + 1
+	    
+	    weight = filtered_player_df.tick[i+1] - filtered_player_df.tick[i]
+	    add_edge!(g_compressed, source_node, target_node, weight)
+	end
+	g_compressed
+end
+
+# ╔═╡ f18376cc-1e05-4ef4-a435-b20e67d6dfd9
+plot(1:nrow(filtered_player_df),filtered_player_df.tick)
 
 # ╔═╡ Cell order:
 # ╠═0c3555e8-b38b-4278-bef0-03b77d2c3703
@@ -468,5 +502,8 @@ end
 # ╠═66809b7e-4dc9-4591-a952-f4d1f91aaaee
 # ╠═f003052e-f148-4ff2-b20a-9b9f5c9c71ea
 # ╠═a49ca75f-0a05-4d9f-8e3c-270d504b544b
-# ╠═8b7bba1b-91ea-40b5-a42f-40249b3586af
+# ╠═cedb3d01-f966-45b2-bce8-749995886f21
+# ╠═d0c6e073-246e-41a3-b13a-0c8bbf0f1178
 # ╠═14393a9a-5e83-439b-a2ac-5927c105f0e5
+# ╠═b5acfea7-0ad5-4d9a-b3df-c1b30965c323
+# ╠═f18376cc-1e05-4ef4-a435-b20e67d6dfd9
