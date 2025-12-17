@@ -13,15 +13,8 @@ begin
     # Load Revise FIRST
     using Revise
     
-    # Now load your packages - changes will auto-update!
-    using CSV, DataFrames, Plots, Parquet2, Plots, Graphs, GraphRecipes, SimpleWeightedGraphs, Images, FileIO
+    using CSV, DataFrames, Plots, Parquet2, Plots, Graphs, GraphRecipes, SimpleWeightedGraphs, Images, FileIO,LinearAlgebra,Statistics
 	
-    # NOTE: Statistics is required for plotting the mean distance, but the 
-    # process_distances function in the package also relies on it implicitly.
-    # We explicitly import it here for the plotting cell.
-    using Statistics 
-    
-    # Import TacMetrics, which re-exports all PathDecomposition functions
 	using TacMetrics
 end
 
@@ -283,7 +276,7 @@ end
 
 # ╔═╡ d0c6e073-246e-41a3-b13a-0c8bbf0f1178
 # STEP 6: Compress the path (using exported package function)
-filtered_player_df = TacMetrics.process_path(path, segments, player_df)
+filtered_player_df,new_path = TacMetrics.process_path(path, segments, player_df)
 
 # ╔═╡ 14393a9a-5e83-439b-a2ac-5927c105f0e5
 begin
@@ -324,6 +317,9 @@ g_compressed = TacMetrics.build_compressed_graph(filtered_player_df)
 
 # ╔═╡ f18376cc-1e05-4ef4-a435-b20e67d6dfd9
 plot(1:nrow(filtered_player_df),filtered_player_df.tick)
+
+# ╔═╡ e6ddee0a-2ba3-4aa0-bcb9-4a5ee2f3b132
+TacMetrics.calculate_path_r2(player_df,new_path)
 
 # ╔═╡ Cell order:
 # ╠═0c3555e8-b38b-4278-bef0-03b77d2c3703
@@ -371,3 +367,4 @@ plot(1:nrow(filtered_player_df),filtered_player_df.tick)
 # ╠═14393a9a-5e83-439b-a2ac-5927c105f0e5
 # ╠═b5acfea7-0ad5-4d9a-b3df-c1b30965c323
 # ╠═f18376cc-1e05-4ef4-a435-b20e67d6dfd9
+# ╠═e6ddee0a-2ba3-4aa0-bcb9-4a5ee2f3b132
