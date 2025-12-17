@@ -93,63 +93,53 @@ function process_distances(distances::Vector{Float64}, max_fault::Int=2, mean_mu
     return segments
 end
 
-
 """
-    process_path(path::Vector{Int}, segments::Vector{UnitRange{Int}}, player_df::AbstractDataFrame) -> DataFrame
+    process_path(path::Vector{Int}, segments::Vector{UnitRange{Int}}, player_df::AbstractDataFrame) -> Tuple{DataFrame, Vector{Int}}
 
-Compresses the optimal path (`path`) by replacing low-movement segments with 
-a single point representing the mean coordinates of that segment's trajectory.
-All non-segment points are kept.
-
-# Arguments:
-- `path`: Vector of indices from the decomposed path.
-- `segments`: Vector of segment ranges (indices into the *path* vector).
-- `player_df`: The full DataFrame containing the points referenced by `path`.
-
-Returns: A new DataFrame (`filtered_player_df`) with the simplified trajectory.
+Compresses the optimal path by replacing low-movement segments with a mean point.
+Returns a Tuple containing:
+1. The new compressed DataFrame.
+2. A vector of indices into the ORIGINAL player_df corresponding to each row in the new DataFrame.
 """
-function process_path(path::Vector{Int}, segments::Vector{UnitRange{Int}}, player_df::AbstractDataFrame)::DataFrame
+function process_path(path::Vector{Int}, segments::Vector{UnitRange{Int}}, player_df::AbstractDataFrame)::Tuple{DataFrame,Vector{Int}}
     filtered_rows = []
+    compressed_path_indices = Int[] # New: tracks original row indices
 
     segment_idx = 1
     n_segment = length(segments)
-
-    # State variable to track the index of the last point added from player_df row indices
     last_path_index_added = -1
 
     idx = 1
     while idx <= length(path)
-        current_index = path[idx] # Row index in player_df
+        current_index = path[idx]
 
-        # 1. Handle START of a segment edge index
+        # 1. Handle START of a segment
         if (segment_idx <= n_segment) && (idx == segments[segment_idx].start)
-            # This logic is copied exactly from the notebook's conditional block
             if last_path_index_added != current_index
-                # Original notebook had 'push' commented out, keeping it that way
                 last_path_index_added = current_index
             end
-
-            # Jump idx to the index corresponding to the last edge of the segment + 1
             idx = segments[segment_idx].stop + 1
             continue
         end
 
-        # 2. Handle END of a segment edge index
+        # 2. Handle END of a segment (Processing the actual compression)
         if (segment_idx <= n_segment) && (idx == segments[segment_idx].stop)
             segment = segments[segment_idx]
-
-            # Calculate the mean point for the segment. 
-            # Original notebook used nodes from path[segment.start] to path[segment.stop].
             segment_point_indices = path[segment.start:segment.stop]
             segment_data = player_df[segment_point_indices, :]
 
-            # Use Statistics.mean for explicit import
+            # A. Add the Mean Point
             segment_row = combine(segment_data, All() .=> Statistics.mean; renamecols=false)
             push!(filtered_rows, segment_row[1, :])
 
-            # Add the end node of the segment (path[idx]) if not a duplicate
+            # Use the middle index of the segment as the "original" reference index
+            mid_idx = segment_point_indices[div(length(segment_point_indices), 2)+1]
+            push!(compressed_path_indices, mid_idx)
+
+            # B. Add the end node of the segment
             if current_index != last_path_index_added
-                push!(filtered_rows, player_df[current_index, :])
+                # push!(filtered_rows, player_df[current_index, :])
+                # push!(compressed_path_indices, current_index)
                 last_path_index_added = current_index
             end
 
@@ -161,17 +151,14 @@ function process_path(path::Vector{Int}, segments::Vector{UnitRange{Int}}, playe
         # 3. Handle non-segment points
         if last_path_index_added != current_index
             push!(filtered_rows, player_df[current_index, :])
+            push!(compressed_path_indices, current_index)
             last_path_index_added = current_index
         end
-
         idx += 1
     end
 
-    # Note: The original notebook does not include the final coordinate-based 
-    # deduplication, so that logic has been removed to maintain fidelity.
     filtered_player_df = DataFrame(filtered_rows)
-
-    return filtered_player_df
+    return filtered_player_df, compressed_path_indices
 end
 
 
