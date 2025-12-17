@@ -6,6 +6,7 @@ using DataFrames, Graphs, SimpleWeightedGraphs, Statistics
 include("preprocessing.jl")
 include("core.jl")
 include("compression.jl")
+include("validation.jl")
 
 # Exports from preprocessing.jl
 export select_single_player, trim_trajectory
@@ -15,5 +16,7 @@ export decompose_path
 
 # Exports from compression.jl
 export calculate_segment_distances, process_distances, process_path, build_compressed_graph
+
+export point_segment_dist2, calculate_path_r2
 
 end
