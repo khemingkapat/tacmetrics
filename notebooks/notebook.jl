@@ -18,6 +18,9 @@ begin
 	using TacMetrics
 end
 
+# ╔═╡ 0fcc12e8-0e8d-45e7-b22f-025e905536da
+using Clustering
+
 # ╔═╡ 8801b0fe-af4d-11f0-170b-972b2cf4deaa
 md"""
 # Read Data
@@ -127,8 +130,8 @@ n = nrow(player_df)
 
 # ╔═╡ 2c301874-08a2-4c83-b503-eab753f7e7cb
 begin
-    t_max_tick = 50
-    d_max = 30.0     
+    t_max_tick = 30
+	d_max = 30.0     
     alpha = 1 # Weight for distance
 	beta = 1 # Weight for time
 end
@@ -319,7 +322,259 @@ g_compressed = TacMetrics.build_compressed_graph(filtered_player_df)
 plot(1:nrow(filtered_player_df),filtered_player_df.tick)
 
 # ╔═╡ e6ddee0a-2ba3-4aa0-bcb9-4a5ee2f3b132
-TacMetrics.calculate_path_r2(player_df,new_path)
+r2 = TacMetrics.calculate_path_r2(player_df,new_path)
+
+# ╔═╡ d42e3d06-7bc4-472d-a66f-08af52913db7
+start_pos,end_pos = collect.(eachrow(player_df[[1,end],[end-1,end]]))
+
+# ╔═╡ 65b27d20-e6be-4fb3-8429-b30b8b1d59cc
+displacement_vec = end_pos-start_pos
+
+# ╔═╡ 90d9e734-5b8b-4f96-ac82-43f216914950
+total_displacement_direct = sqrt(dot(displacement_vec,displacement_vec))
+
+# ╔═╡ 6bfeacfe-e0f5-434e-8041-6ea7e4b810a0
+filtered_player_df
+
+# ╔═╡ d7a735b3-727e-4b65-9517-1283c82bf6b7
+begin
+	dx = diff(filtered_player_df[:,end-1])
+	dy = diff(filtered_player_df[:,end])
+end
+
+# ╔═╡ 3d817104-aa2a-42f7-800d-d6c9c3fc66a6
+total_displacement_path = sum(hypot.(dx,dy))
+
+# ╔═╡ c5c756a5-25c3-43e4-a127-eb7ccc6c11e4
+path_efficiency = total_displacement_direct/total_displacement_path
+# this is very bad approach. if I want to really do this I really have to find the way to find the shortest path with map consideration so maybe transform the map in to kind of maze and make the algorithm work
+
+# taking note that to explore the nav mesh
+
+# ╔═╡ ab568eaa-9287-489b-8fb7-e0624325d02d
+md"
+# Dynamic Grouping
+"
+
+# ╔═╡ a1d1b2b4-7c1a-4b1c-bb6a-7e2df0e3b98a
+sampled_df
+
+# ╔═╡ 4580754e-007b-4c24-a703-82c1c37ec91c
+trimmed_df = TacMetrics.trim_trajectory(sampled_df)
+
+# ╔═╡ 0b2dfd31-0e1c-4c89-8a99-9b3a4d6d9190
+cluster_df = filter(:tick => t -> t in trimmed_df.tick,transformed_df)
+
+# ╔═╡ 92797969-e9f5-45f6-90f0-7fcd1946af3a
+resampled_df = filter(:tick => t -> t in unique(cluster_df.tick)[1:10:end],cluster_df)
+
+# ╔═╡ 72280500-981a-477a-9fc1-e9a71206f7d7
+scatter(resampled_df.X, resampled_df.Y, 
+    group = resampled_df.tick,      # This colors the dots by player
+    xlabel = "X Coordinate", 
+    ylabel = "Y Coordinate",
+    title = "Player Positions",
+    markersize = 4,
+    alpha = 0.6,             # Makes overlapping points easier to see
+    legend = :outertopright)
+
+# ╔═╡ d9e2f756-8818-49ea-948e-92bada830257
+using_tick = unique(resampled_df[:,:tick])[1]
+
+# ╔═╡ 8072e2fe-dc85-468e-9aa9-ea7dfd98a13c
+tick_df = filter(:tick => t -> t == using_tick,resampled_df)
+
+# ╔═╡ 64bba327-4df4-4846-8b02-978988adc309
+data_matrix = Matrix(tick_df[:,[:X,:Y]])
+
+# ╔═╡ e1d9ee9c-2333-4f2b-a3d5-2186d5fbcefd
+dist_mat = pairwise(Euclidean(), data_matrix, dims=1)
+
+# ╔═╡ 54eed427-438a-406b-8dfc-b46b40a4aa08
+h_result = hclust(dist_mat, linkage=:complete)
+
+# ╔═╡ 7c365c7e-e5fe-45fa-bd9b-f58baa70e485
+scatter(tick_df.X,tick_df.Y)
+
+# ╔═╡ f9941c40-a945-4d40-a15b-5e9ac3c385c7
+cutree(h_result, h = 50)
+
+# ╔═╡ c4fae455-a6ee-4529-bd13-5f9c8b46f0ac
+copy(resampled_df)
+
+# ╔═╡ 4ca03643-71b1-4e03-82c7-96b747b1ed73
+using_tick
+
+# ╔═╡ a3b6e5b3-078d-47ef-893c-b7d953cd6472
+indices = findall(resampled_df.tick .== using_tick)
+
+# ╔═╡ 74332993-cd2e-44b0-bab1-5824ba730a1b
+function cluster_players(df, height=50)
+    result_df = copy(df)
+    result_df.cluster = zeros(Int, nrow(df)) 
+    
+    for tick_df in groupby(result_df, :tick)
+        if nrow(tick_df) > 1
+            data_matrix = Matrix(tick_df[:, [:X, :Y]])
+            dist_mat = pairwise(Euclidean(), data_matrix, dims=1)
+            h_result = hclust(dist_mat, linkage=:complete)
+            
+            tick_df.cluster .= cutree(h_result, h = height)
+        else
+            tick_df.cluster .= 1
+        end
+    end
+    return result_df
+end
+
+# ╔═╡ 668469d3-a55f-40f0-b54b-c2af31b8fdb1
+clustered_df = cluster_players(resampled_df)			
+
+# ╔═╡ c2b4b129-3065-4e8e-b0b5-06303f026d3f
+function calculate_cluster_features(df::DataFrame)
+    cluster_features = combine(groupby(df, [:cluster])) do group_df
+        (
+            centroid_x = mean(group_df.X),
+            centroid_y = mean(group_df.Y),
+            size = nrow(group_df),
+            player_set = Set(group_df.steamid),
+			player_name_set = Set(group_df.name)
+        )
+    end
+    return cluster_features
+end
+
+# ╔═╡ e93bb742-86f8-416d-b8b1-c1b6bcda8907
+function jaccard_similarity(set1::Set, set2::Set)
+    intersection = length(intersect(set1, set2))
+    union_size = length(union(set1, set2))
+    return union_size > 0 ? intersection / union_size : 0.0
+end
+
+# ╔═╡ bb346e49-7c86-4a50-af43-830c7c2e173b
+function construct_cost_matrix(
+    curr_clusters::DataFrame, 
+    next_clusters::DataFrame;
+)
+    n_curr = nrow(curr_clusters)
+    n_next = nrow(next_clusters)
+    
+    # Initialize cost matrix
+    cost_matrix = zeros(Float64, n_curr, n_next)
+    
+    # Calculate cost for each pair
+    for i in 1:n_curr
+        for j in 1:n_next
+            # Player overlap similarity
+            player_sim = jaccard_similarity(
+                curr_clusters[i, :player_set],
+                next_clusters[j, :player_set]
+            )
+
+            cost_matrix[i, j] = player_sim
+				
+        end
+    end
+    
+    return cost_matrix
+end
+
+
+
+# ╔═╡ 657f30b7-d086-4422-8b74-31db49681870
+function get_node_id(node_map::Dict, tick::Int, cluster::Int)
+    if !haskey(node_map, (tick, cluster))
+        next_id = length(node_map) + 1
+        node_map[(tick, cluster)] = next_id
+        return next_id
+    end
+    return node_map[(tick, cluster)]
+end
+
+# ╔═╡ 330bde73-ff87-49ee-b8e9-cbe54832cfbb
+begin
+    # Initialize graph and node mapping
+    cluster_graph = SimpleWeightedDiGraph(0)
+    node_map = Dict{Tuple{Int, Int}, Int}()
+	next_id = 1
+    # Get unique ticks
+    ticks = unique(clustered_df.tick)
+    n_tick = length(ticks)
+    
+    for idx in 1:n_tick-1
+        # println("At idx = $(idx)")
+        
+        # Filter data for current and next tick
+        curr_df = filter(:tick => t -> t == ticks[idx], clustered_df)
+        next_df = filter(:tick => t -> t == ticks[idx+1], clustered_df)
+        
+        # Calculate cluster features
+        curr_clusters = calculate_cluster_features(curr_df)
+        next_clusters = calculate_cluster_features(next_df)
+        
+        # Construct cost matrix
+        cost_matrix = construct_cost_matrix(
+            curr_clusters,
+            next_clusters,
+        )
+
+		# display(cost_matrix)
+        # Hungarian algorithm
+        assignments_zip = Tuple.(findall(!iszero, cost_matrix))
+        
+        for pos in assignments_zip
+            from = pos[1]
+            to = pos[2]
+            weight = cost_matrix[from,to]
+            # Convert Tuples to Unique Integers
+            u = get_node_id(node_map, idx, from)      # Node at current tick
+            v = get_node_id(node_map, idx + 1, to)    # Node at next tick
+            
+            # Add vertices if needed
+            while nv(cluster_graph) < max(u, v)
+                add_vertex!(cluster_graph)
+            end
+            
+            # Add edge with weight
+            add_edge!(cluster_graph, u, v, weight)
+        end
+    end
+end
+
+# ╔═╡ b5f97be8-28e5-46c4-9455-ac7ea2bb94c2
+cluster_graph
+
+# ╔═╡ 73a75965-12d2-4373-b790-dd8c8bad0a0d
+id_to_node = Dict(value => key for (key, value) in node_map)
+
+# ╔═╡ 5e3a45a7-2c7b-4691-b6ca-cc9e50df7dd8
+begin
+	x_coords = zeros(nv(cluster_graph))
+	y_coords = zeros(nv(cluster_graph))
+	
+	for i in 1:nv(cluster_graph)
+	    # Get (tick_index, cluster_index) from your inverted dictionary
+	    tick, cluster_num = id_to_node[i]
+	    
+	    # x is the actual tick value from your ticks array
+	    x_coords[i] = tick
+	    
+	    # y is the cluster number
+	    y_coords[i] = cluster_num
+	end
+	
+	# 2. Plot the graph using the coordinates
+	graphplot(cluster_graph, 
+	          x = x_coords*2, 
+	          y = y_coords*5, 
+	          nodesize = 2,
+	          linealpha = 1,          # Makes lines slightly transparent
+	          curves = false,           # Straight lines look better for timelines
+	          xlabel = "Tick",
+	          ylabel = "Cluster Number",
+	          title = "Cluster Transitions Over Time")
+	
+end
 
 # ╔═╡ Cell order:
 # ╠═0c3555e8-b38b-4278-bef0-03b77d2c3703
@@ -368,3 +623,37 @@ TacMetrics.calculate_path_r2(player_df,new_path)
 # ╠═b5acfea7-0ad5-4d9a-b3df-c1b30965c323
 # ╠═f18376cc-1e05-4ef4-a435-b20e67d6dfd9
 # ╠═e6ddee0a-2ba3-4aa0-bcb9-4a5ee2f3b132
+# ╠═d42e3d06-7bc4-472d-a66f-08af52913db7
+# ╠═65b27d20-e6be-4fb3-8429-b30b8b1d59cc
+# ╠═90d9e734-5b8b-4f96-ac82-43f216914950
+# ╠═6bfeacfe-e0f5-434e-8041-6ea7e4b810a0
+# ╠═d7a735b3-727e-4b65-9517-1283c82bf6b7
+# ╠═3d817104-aa2a-42f7-800d-d6c9c3fc66a6
+# ╠═c5c756a5-25c3-43e4-a127-eb7ccc6c11e4
+# ╟─ab568eaa-9287-489b-8fb7-e0624325d02d
+# ╠═a1d1b2b4-7c1a-4b1c-bb6a-7e2df0e3b98a
+# ╠═4580754e-007b-4c24-a703-82c1c37ec91c
+# ╠═0b2dfd31-0e1c-4c89-8a99-9b3a4d6d9190
+# ╠═92797969-e9f5-45f6-90f0-7fcd1946af3a
+# ╠═72280500-981a-477a-9fc1-e9a71206f7d7
+# ╠═0fcc12e8-0e8d-45e7-b22f-025e905536da
+# ╠═d9e2f756-8818-49ea-948e-92bada830257
+# ╠═8072e2fe-dc85-468e-9aa9-ea7dfd98a13c
+# ╠═64bba327-4df4-4846-8b02-978988adc309
+# ╠═e1d9ee9c-2333-4f2b-a3d5-2186d5fbcefd
+# ╠═54eed427-438a-406b-8dfc-b46b40a4aa08
+# ╠═7c365c7e-e5fe-45fa-bd9b-f58baa70e485
+# ╠═f9941c40-a945-4d40-a15b-5e9ac3c385c7
+# ╠═c4fae455-a6ee-4529-bd13-5f9c8b46f0ac
+# ╠═4ca03643-71b1-4e03-82c7-96b747b1ed73
+# ╠═a3b6e5b3-078d-47ef-893c-b7d953cd6472
+# ╠═74332993-cd2e-44b0-bab1-5824ba730a1b
+# ╠═668469d3-a55f-40f0-b54b-c2af31b8fdb1
+# ╠═c2b4b129-3065-4e8e-b0b5-06303f026d3f
+# ╠═e93bb742-86f8-416d-b8b1-c1b6bcda8907
+# ╠═bb346e49-7c86-4a50-af43-830c7c2e173b
+# ╠═657f30b7-d086-4422-8b74-31db49681870
+# ╠═330bde73-ff87-49ee-b8e9-cbe54832cfbb
+# ╠═b5f97be8-28e5-46c4-9455-ac7ea2bb94c2
+# ╠═73a75965-12d2-4373-b790-dd8c8bad0a0d
+# ╠═5e3a45a7-2c7b-4691-b6ca-cc9e50df7dd8
