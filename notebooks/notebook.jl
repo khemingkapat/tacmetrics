@@ -366,7 +366,7 @@ trimmed_df = TacMetrics.trim_trajectory(sampled_df)
 cluster_df = filter(:tick => t -> t in trimmed_df.tick,transformed_df)
 
 # ╔═╡ 92797969-e9f5-45f6-90f0-7fcd1946af3a
-resampled_df = filter(:tick => t -> t in unique(cluster_df.tick)[1:10:end],cluster_df)
+resampled_df = filter(:tick => t -> t in unique(cluster_df.tick)[1:50:end],cluster_df)
 
 # ╔═╡ 72280500-981a-477a-9fc1-e9a71206f7d7
 scatter(resampled_df.X, resampled_df.Y, 
@@ -431,7 +431,7 @@ end
 clustered_df = cluster_players(resampled_df)			
 
 # ╔═╡ c2b4b129-3065-4e8e-b0b5-06303f026d3f
-function calculate_cluster_features(df::DataFrame)
+function calculate_cluster_features(df)
     cluster_features = combine(groupby(df, [:cluster])) do group_df
         (
             centroid_x = mean(group_df.X),
@@ -576,6 +576,71 @@ begin
 	
 end
 
+# ╔═╡ aeacfac5-a92c-409e-95db-f706eb4caf7b
+clustered_grouped_df = combine(groupby(clustered_df, :tick), 
+    group_df -> calculate_cluster_features(group_df))
+
+# ╔═╡ 39f32d64-0fe4-42c2-a36f-b04de840aaff
+describe(clustered_grouped_df)
+
+# ╔═╡ f1c52c9f-1e19-42e9-979d-5bfd9092c0bb
+nv(cluster_graph) == length(clustered_grouped_df.centroid_x) == length(clustered_grouped_df.centroid_y)
+
+# ╔═╡ dafe943a-3ea5-4611-ba31-cb4abb2bf2c4
+# Define shapes for sizes 1 through 5
+marker_shape_dict = Dict(
+    1 => :circle,
+    2 => :square,
+    3 => :diamond,
+    4 => :utriangle,
+    5 => :pentagon
+)
+
+# ╔═╡ ed7af2cf-16a8-4bfa-9156-eb007cf801b8
+begin
+	img = load("../.awpy/maps/$(selected_map).png")
+    img_height, img_width = size(img)
+
+	x_coord = collect(clustered_grouped_df.centroid_x)
+    y_coord = img_height .- collect(clustered_grouped_df.centroid_y)
+	markersize=5 .+ collect(clustered_grouped_df.size)
+	shapes_array = get.(Ref(marker_shape_dict), collect(clustered_grouped_df.size), :circle)
+    
+    bgc = plot(img,
+               yflip=true,                  
+               aspect_ratio=:equal,
+               legend=false,
+               size=(1000,1000),
+               xlims=(1, img_width),
+               ylims=(1, img_height),
+               axis=false,
+               ticks=false)
+    for edge in edges(cluster_graph)
+        src_idx = src(edge)
+        dst_idx = dst(edge)
+        plot!(bgc,
+              [x_coord[src_idx], x_coord[dst_idx]], 
+              [y_coord[src_idx], y_coord[dst_idx]], 
+              color=:red, 
+              alpha=0.6, 
+              linewidth=1.5,
+              label="")
+    end
+    
+    # Draw nodes on top
+    c_scatter_plot = scatter(bgc,
+             x_coord, 
+             y_coord, 
+             markersize=markersize, 
+			markershape=shapes_array,
+             markercolor=:red,
+             markerstrokewidth=0,
+             label="",
+             title="Cluster Transitions Over Time")
+    
+	c_scatter_plot
+end
+
 # ╔═╡ Cell order:
 # ╠═0c3555e8-b38b-4278-bef0-03b77d2c3703
 # ╟─8801b0fe-af4d-11f0-170b-972b2cf4deaa
@@ -657,3 +722,8 @@ end
 # ╠═b5f97be8-28e5-46c4-9455-ac7ea2bb94c2
 # ╠═73a75965-12d2-4373-b790-dd8c8bad0a0d
 # ╠═5e3a45a7-2c7b-4691-b6ca-cc9e50df7dd8
+# ╠═aeacfac5-a92c-409e-95db-f706eb4caf7b
+# ╠═39f32d64-0fe4-42c2-a36f-b04de840aaff
+# ╠═f1c52c9f-1e19-42e9-979d-5bfd9092c0bb
+# ╠═dafe943a-3ea5-4611-ba31-cb4abb2bf2c4
+# ╠═ed7af2cf-16a8-4bfa-9156-eb007cf801b8
