@@ -87,7 +87,7 @@ function build_cluster_graph(clustered_df::DataFrame)
 
         # Construct cost matrix
         cost_matrix = construct_cost_matrix(curr_clusters, next_clusters)
-        display(cost_matrix)
+
 
         # Find assignments using cost matrix
         assignments_zip = Tuple.(findall(!iszero, cost_matrix))
