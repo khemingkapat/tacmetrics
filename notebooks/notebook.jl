@@ -428,119 +428,10 @@ function cluster_players(df, height=50)
 end
 
 # ╔═╡ 668469d3-a55f-40f0-b54b-c2af31b8fdb1
-clustered_df = cluster_players(resampled_df)			
+clustered_df = TacMetrics.cluster_players(resampled_df)			
 
-# ╔═╡ c2b4b129-3065-4e8e-b0b5-06303f026d3f
-function calculate_cluster_features(df)
-    cluster_features = combine(groupby(df, [:cluster])) do group_df
-        (
-            centroid_x = mean(group_df.X),
-            centroid_y = mean(group_df.Y),
-            size = nrow(group_df),
-            player_set = Set(group_df.steamid),
-			player_name_set = Set(group_df.name)
-        )
-    end
-    return cluster_features
-end
-
-# ╔═╡ e93bb742-86f8-416d-b8b1-c1b6bcda8907
-function jaccard_similarity(set1::Set, set2::Set)
-    intersection = length(intersect(set1, set2))
-    union_size = length(union(set1, set2))
-    # return union_size > 0 ? intersection / union_size : 0.0
-	return Int(intersection)
-end
-
-# ╔═╡ bb346e49-7c86-4a50-af43-830c7c2e173b
-function construct_cost_matrix(
-    curr_clusters::DataFrame, 
-    next_clusters::DataFrame;
-)
-    n_curr = nrow(curr_clusters)
-    n_next = nrow(next_clusters)
-    
-    # Initialize cost matrix
-    cost_matrix = zeros(Float64, n_curr, n_next)
-    
-    # Calculate cost for each pair
-    for i in 1:n_curr
-        for j in 1:n_next
-            # Player overlap similarity
-            player_sim = jaccard_similarity(
-                curr_clusters[i, :player_set],
-                next_clusters[j, :player_set]
-            )
-
-            cost_matrix[i, j] = player_sim
-				
-        end
-    end
-    
-    return cost_matrix
-end
-
-
-
-# ╔═╡ 657f30b7-d086-4422-8b74-31db49681870
-function get_node_id(node_map::Dict, tick::Int, cluster::Int)
-    if !haskey(node_map, (tick, cluster))
-        next_id = length(node_map) + 1
-        node_map[(tick, cluster)] = next_id
-        return next_id
-    end
-    return node_map[(tick, cluster)]
-end
-
-# ╔═╡ 330bde73-ff87-49ee-b8e9-cbe54832cfbb
-begin
-    # Initialize graph and node mapping
-    cluster_graph = SimpleWeightedDiGraph(0)
-    node_map = Dict{Tuple{Int, Int}, Int}()
-	next_id = 1
-    # Get unique ticks
-    ticks = unique(clustered_df.tick)
-    n_tick = length(ticks)
-    
-    for idx in 1:n_tick-1
-        # println("At idx = $(idx)")
-        
-        # Filter data for current and next tick
-        curr_df = filter(:tick => t -> t == ticks[idx], clustered_df)
-        next_df = filter(:tick => t -> t == ticks[idx+1], clustered_df)
-        
-        # Calculate cluster features
-        curr_clusters = calculate_cluster_features(curr_df)
-        next_clusters = calculate_cluster_features(next_df)
-        
-        # Construct cost matrix
-        cost_matrix = construct_cost_matrix(
-            curr_clusters,
-            next_clusters,
-        )
-
-		display(cost_matrix)
-        # Hungarian algorithm
-        assignments_zip = Tuple.(findall(!iszero, cost_matrix))
-        
-        for pos in assignments_zip
-            from = pos[1]
-            to = pos[2]
-            weight = cost_matrix[from,to]
-            # Convert Tuples to Unique Integers
-            u = get_node_id(node_map, idx, from)      # Node at current tick
-            v = get_node_id(node_map, idx + 1, to)    # Node at next tick
-            
-            # Add vertices if needed
-            while nv(cluster_graph) < max(u, v)
-                add_vertex!(cluster_graph)
-            end
-            
-            # Add edge with weight
-            add_edge!(cluster_graph, u, v, weight)
-        end
-    end
-end
+# ╔═╡ 2e62885a-f039-471a-9c85-5c1b5a9d5d1b
+cluster_graph,node_map = TacMetrics.build_cluster_graph(clustered_df)
 
 # ╔═╡ b5f97be8-28e5-46c4-9455-ac7ea2bb94c2
 cluster_graph
@@ -550,7 +441,10 @@ id_to_node = Dict(value => key for (key, value) in node_map)
 
 # ╔═╡ aeacfac5-a92c-409e-95db-f706eb4caf7b
 clustered_grouped_df = combine(groupby(clustered_df, :tick), 
-    group_df -> calculate_cluster_features(group_df))
+    group_df -> TacMetrics.calculate_cluster_features(group_df))
+
+# ╔═╡ cefa35b3-bf3b-450d-8c4a-79935f2576a8
+  ticks = unique(clustered_df.tick)
 
 # ╔═╡ 5e3a45a7-2c7b-4691-b6ca-cc9e50df7dd8
 begin
@@ -596,12 +490,6 @@ begin
               ylabel = "Cluster Number",
               title = "Cluster Transitions Over Time")
 end
-
-# ╔═╡ d0b38857-6b44-4e83-9920-0eaf0847ab1b
-
-
-# ╔═╡ 39f32d64-0fe4-42c2-a36f-b04de840aaff
-describe(clustered_grouped_df)
 
 # ╔═╡ f1c52c9f-1e19-42e9-979d-5bfd9092c0bb
 nv(cluster_graph) == length(clustered_grouped_df.centroid_x) == length(clustered_grouped_df.centroid_y)
@@ -743,17 +631,12 @@ end
 # ╠═a3b6e5b3-078d-47ef-893c-b7d953cd6472
 # ╠═74332993-cd2e-44b0-bab1-5824ba730a1b
 # ╠═668469d3-a55f-40f0-b54b-c2af31b8fdb1
-# ╠═c2b4b129-3065-4e8e-b0b5-06303f026d3f
-# ╠═e93bb742-86f8-416d-b8b1-c1b6bcda8907
-# ╠═bb346e49-7c86-4a50-af43-830c7c2e173b
-# ╠═657f30b7-d086-4422-8b74-31db49681870
-# ╠═330bde73-ff87-49ee-b8e9-cbe54832cfbb
+# ╠═2e62885a-f039-471a-9c85-5c1b5a9d5d1b
 # ╠═b5f97be8-28e5-46c4-9455-ac7ea2bb94c2
 # ╠═73a75965-12d2-4373-b790-dd8c8bad0a0d
 # ╠═aeacfac5-a92c-409e-95db-f706eb4caf7b
+# ╠═cefa35b3-bf3b-450d-8c4a-79935f2576a8
 # ╠═5e3a45a7-2c7b-4691-b6ca-cc9e50df7dd8
-# ╠═d0b38857-6b44-4e83-9920-0eaf0847ab1b
-# ╠═39f32d64-0fe4-42c2-a36f-b04de840aaff
 # ╠═f1c52c9f-1e19-42e9-979d-5bfd9092c0bb
 # ╠═dafe943a-3ea5-4611-ba31-cb4abb2bf2c4
 # ╠═ed7af2cf-16a8-4bfa-9156-eb007cf801b8
