@@ -39,7 +39,7 @@ selected_map = "de_dust2"
 selected_round = 3
 
 # ╔═╡ 01c0dddd-cbf2-4dc3-afab-5718e603d434
-selected_side = "ct"
+selected_side = "t"
 
 # ╔═╡ 92cba50f-0b54-44bd-9809-739e8d1b958d
 selected_df = filter(row -> row.round_num == selected_round && row.side == selected_side, df, view=false)
@@ -448,7 +448,8 @@ end
 function jaccard_similarity(set1::Set, set2::Set)
     intersection = length(intersect(set1, set2))
     union_size = length(union(set1, set2))
-    return union_size > 0 ? intersection / union_size : 0.0
+    # return union_size > 0 ? intersection / union_size : 0.0
+	return Int(intersection)
 end
 
 # ╔═╡ bb346e49-7c86-4a50-af43-830c7c2e173b
@@ -518,7 +519,7 @@ begin
             next_clusters,
         )
 
-		# display(cost_matrix)
+		display(cost_matrix)
         # Hungarian algorithm
         assignments_zip = Tuple.(findall(!iszero, cost_matrix))
         
@@ -547,38 +548,57 @@ cluster_graph
 # ╔═╡ 73a75965-12d2-4373-b790-dd8c8bad0a0d
 id_to_node = Dict(value => key for (key, value) in node_map)
 
-# ╔═╡ 5e3a45a7-2c7b-4691-b6ca-cc9e50df7dd8
-begin
-	x_coords = zeros(nv(cluster_graph))
-	y_coords = zeros(nv(cluster_graph))
-	
-	for i in 1:nv(cluster_graph)
-	    # Get (tick_index, cluster_index) from your inverted dictionary
-	    tick, cluster_num = id_to_node[i]
-	    
-	    # x is the actual tick value from your ticks array
-	    x_coords[i] = tick
-	    
-	    # y is the cluster number
-	    y_coords[i] = cluster_num
-	end
-	
-	# 2. Plot the graph using the coordinates
-	graphplot(cluster_graph, 
-	          x = x_coords*2, 
-	          y = y_coords*5, 
-	          nodesize = 2,
-	          linealpha = 1,          # Makes lines slightly transparent
-	          curves = false,           # Straight lines look better for timelines
-	          xlabel = "Tick",
-	          ylabel = "Cluster Number",
-	          title = "Cluster Transitions Over Time")
-	
-end
-
 # ╔═╡ aeacfac5-a92c-409e-95db-f706eb4caf7b
 clustered_grouped_df = combine(groupby(clustered_df, :tick), 
     group_df -> calculate_cluster_features(group_df))
+
+# ╔═╡ 5e3a45a7-2c7b-4691-b6ca-cc9e50df7dd8
+begin
+    x_coords = zeros(nv(cluster_graph))
+    y_coords = zeros(nv(cluster_graph))
+    sizes = zeros(nv(cluster_graph))
+    # We will store the labels as strings here
+    node_labels = Vector{String}(undef, nv(cluster_graph)) 
+    
+    index_map = Dict((row.tick, row.cluster) => row.size for row in eachrow(clustered_grouped_df))
+    
+    for i in 1:nv(cluster_graph)
+        tick, cluster_num = id_to_node[i]
+        
+        x_coords[i] = tick
+        y_coords[i] = cluster_num
+
+        current_size = index_map[(ticks[tick], cluster_num)]
+        sizes[i] = current_size
+        
+        # Create the string label for the node
+        node_labels[i] = string(current_size)
+    end
+
+	for e in edges(cluster_graph)
+    	s = src(e)      # Get source vertex
+    	d = dst(e)      # Get destination vertex
+    	w = weight(e)   # Get edge weight
+	end
+
+	
+    graphplot(cluster_graph, 
+              x = x_coords*2, 
+              y = y_coords*5, 
+              names = node_labels,
+              edgelabel = Int.(weights(cluster_graph)),    # <--- This adds labels to the lines
+              edgelabel_offset = 0.05,     # Moves text slightly so it doesn't overlap line
+              fontsize = 8,
+              nodesize = 2,
+              linealpha = 0.6,             # Lower alpha helps see labels better
+              curves = false, 
+              xlabel = "Tick",
+              ylabel = "Cluster Number",
+              title = "Cluster Transitions Over Time")
+end
+
+# ╔═╡ d0b38857-6b44-4e83-9920-0eaf0847ab1b
+
 
 # ╔═╡ 39f32d64-0fe4-42c2-a36f-b04de840aaff
 describe(clustered_grouped_df)
@@ -598,14 +618,14 @@ marker_shape_dict = Dict(
 
 # ╔═╡ ed7af2cf-16a8-4bfa-9156-eb007cf801b8
 begin
-	img = load("../.awpy/maps/$(selected_map).png")
+    img = load("../.awpy/maps/$(selected_map).png")
     img_height, img_width = size(img)
-
-	x_coord = collect(clustered_grouped_df.centroid_x)
+    x_coord = collect(clustered_grouped_df.centroid_x)
     y_coord = img_height .- collect(clustered_grouped_df.centroid_y)
-	markersize=5 .+ collect(clustered_grouped_df.size)
-	shapes_array = get.(Ref(marker_shape_dict), collect(clustered_grouped_df.size), :circle)
-    
+    markersize = 5 .+ collect(clustered_grouped_df.size)
+    shapes_array = get.(Ref(marker_shape_dict), collect(clustered_grouped_df.size), :circle)
+
+    # 1. Base Plot
     bgc = plot(img,
                yflip=true,                  
                aspect_ratio=:equal,
@@ -615,30 +635,39 @@ begin
                ylims=(1, img_height),
                axis=false,
                ticks=false)
+    # 2. Prepare Edges and Labels
+    edge_x = []
+    edge_y = []
+    edge_weights = weights(cluster_graph) # Get the weight matrix
+
     for edge in edges(cluster_graph)
-        src_idx = src(edge)
-        dst_idx = dst(edge)
-        plot!(bgc,
-              [x_coord[src_idx], x_coord[dst_idx]], 
-              [y_coord[src_idx], y_coord[dst_idx]], 
-              color=:red, 
-              alpha=0.6, 
-              linewidth=1.5,
-              label="")
+        u, v = src(edge), dst(edge)
+        push!(edge_x, x_coord[u], x_coord[v], NaN)
+        push!(edge_y, y_coord[u], y_coord[v], NaN)
+
+        # Calculate midpoint for the weight label
+        mid_x = (x_coord[u] + x_coord[v]) / 2
+        mid_y = (y_coord[u] + y_coord[v]) / 2
+        weight_val = edge_weights[u, v]
+        # Add annotation to the plot
+        annotate!(bgc, mid_x, mid_y, 
+                  text("$(Int(Int(weight_val)))", :white, :center, 5, font("sans-serif")))
     end
-    
-    # Draw nodes on top
-    c_scatter_plot = scatter(bgc,
+    # 3. Draw Edge Lines
+    plot!(bgc, edge_x, edge_y, color=:red, alpha=0.6, linewidth=1.5)
+
+    # 4. Draw Nodes on Top
+    c_scatter_plot = scatter!(bgc,
              x_coord, 
              y_coord, 
              markersize=markersize, 
-			markershape=shapes_array,
+             markershape=shapes_array,
              markercolor=:red,
              markerstrokewidth=0,
              label="",
              title="Cluster Transitions Over Time")
-    
-	c_scatter_plot
+
+    c_scatter_plot
 end
 
 # ╔═╡ Cell order:
@@ -721,8 +750,9 @@ end
 # ╠═330bde73-ff87-49ee-b8e9-cbe54832cfbb
 # ╠═b5f97be8-28e5-46c4-9455-ac7ea2bb94c2
 # ╠═73a75965-12d2-4373-b790-dd8c8bad0a0d
-# ╠═5e3a45a7-2c7b-4691-b6ca-cc9e50df7dd8
 # ╠═aeacfac5-a92c-409e-95db-f706eb4caf7b
+# ╠═5e3a45a7-2c7b-4691-b6ca-cc9e50df7dd8
+# ╠═d0b38857-6b44-4e83-9920-0eaf0847ab1b
 # ╠═39f32d64-0fe4-42c2-a36f-b04de840aaff
 # ╠═f1c52c9f-1e19-42e9-979d-5bfd9092c0bb
 # ╠═dafe943a-3ea5-4611-ba31-cb4abb2bf2c4
