@@ -408,25 +408,6 @@ using_tick
 # ╔═╡ a3b6e5b3-078d-47ef-893c-b7d953cd6472
 indices = findall(resampled_df.tick .== using_tick)
 
-# ╔═╡ 74332993-cd2e-44b0-bab1-5824ba730a1b
-function cluster_players(df, height=50)
-    result_df = copy(df)
-    result_df.cluster = zeros(Int, nrow(df)) 
-    
-    for tick_df in groupby(result_df, :tick)
-        if nrow(tick_df) > 1
-            data_matrix = Matrix(tick_df[:, [:X, :Y]])
-            dist_mat = pairwise(Euclidean(), data_matrix, dims=1)
-            h_result = hclust(dist_mat, linkage=:complete)
-            
-            tick_df.cluster .= cutree(h_result, h = height)
-        else
-            tick_df.cluster .= 1
-        end
-    end
-    return result_df
-end
-
 # ╔═╡ 668469d3-a55f-40f0-b54b-c2af31b8fdb1
 clustered_df = TacMetrics.cluster_players(resampled_df)			
 
@@ -558,6 +539,128 @@ begin
     c_scatter_plot
 end
 
+# ╔═╡ ea20a110-ae10-4188-9d96-ddf904807ce1
+md"
+# Area Coverage Index
+"
+
+# ╔═╡ e1f7516e-ffe3-4154-9713-e780c061147c
+transformed_all_df = TacMetrics.transform_coord(map_data,df,x_col=:X,y_col=:Y)
+
+# ╔═╡ 168b0cde-9143-4c36-b10b-c7926cc43b69
+function get_center_location(df, round, side; tick=nothing, tick_index=nothing)
+    side_df = filter([:side,:round_num] => (s,r) -> s == side && r == round, df)
+    
+    if nrow(side_df) == 0
+        return (NaN, NaN)
+    end
+
+    # 2. Determine which tick to use
+    target_df = if !isnothing(tick)
+        # Filter by specific tick value
+        filter(:tick => t -> t == tick, side_df)
+    elseif !isnothing(tick_index)
+        # Get unique ticks, sort them, and pick the Nth one
+        unique_ticks = sort(unique(side_df.tick))
+        if tick_index > length(unique_ticks) || tick_index < 1
+            return (NaN, NaN) # Index out of bounds
+        end
+        chosen_tick = unique_ticks[tick_index]
+        filter(:tick => t -> t == chosen_tick, side_df)
+    else
+        error("You must provide either 'tick' or 'tick_index'")
+    end
+
+    # 3. Calculate means
+    if nrow(target_df) == 0
+        return (NaN, NaN)
+    end
+
+    return (mean(target_df.X), mean(target_df.Y))
+end
+
+# ╔═╡ c720b949-c146-48de-9c7c-549386b218ea
+ct_start = get_center_location(transformed_all_df,selected_round,"ct",tick_index=2)
+
+# ╔═╡ 3cbe8e0b-8e3d-4b62-8556-473ee83b33b1
+t_start = get_center_location(transformed_all_df,selected_round,"t",tick_index=1)
+
+# ╔═╡ 5e8daff2-615d-4ff8-b50e-41bb1b5b5a5b
+x_diff = abs(ct_start[1]-t_start[1])
+
+# ╔═╡ 0d2fda19-808c-4b7a-961f-ba051251f1a2
+y_diff = abs(ct_start[2]-t_start[2])
+
+# ╔═╡ 6a05ecf8-8fa1-4b81-a252-e14703a72613
+bga = plot(img,
+		   yflip=true,                  
+		   aspect_ratio=:equal,
+		   legend=false,
+		   size=(1000,1000),
+		   xlims=(1, img_width),
+		   ylims=(1, img_height),
+		   axis=true,
+		   ticks=true)
+
+# ╔═╡ 326e3135-0619-4648-b166-1face3fc38cb
+mean((ct_start[1],t_start[1]))
+
+
+# ╔═╡ dfebf2cd-1cdd-4840-a82e-fcf95f216a73
+if x_diff > y_diff
+	split_point_x = mean([ct_start[1],t_start[1]])
+	vline(bga,[split_point_x],color=:red,linewidth=3)
+else
+	split_point_y = 1024-mean([ct_start[2],t_start[2]])
+	hline(bga,[split_point_y],color=:red,linewidth=3)
+end
+
+# ╔═╡ 7879ec35-d891-46e5-85e6-ab8d8463a852
+begin
+	center_dif = plot(bga,
+		[ct_start[1],t_start[1]],
+		1024 .- [ct_start[2],t_start[2]],
+		color=:blue,
+		linewidth=3)
+	center_split = hline(center_dif,[split_point_y],color=:red,linewidth=3)
+end
+
+# ╔═╡ 63fc5fe6-da82-40e1-bb08-9b7c96486958
+split_point_y
+
+# ╔═╡ dcb97d65-5546-438a-b776-d88fb7eab8cf
+slope = (ct_start[2]-t_start[2])/(ct_start[1]-t_start[1])
+
+# ╔═╡ e4f937ff-3787-4fc2-96e3-fd842f8ed12c
+intercept = ct_start[2] - slope*ct_start[1]
+
+# ╔═╡ 274e74d4-ee91-462c-bd9f-f165a6025b43
+intersection_x = ((1024 - split_point_y) - intercept)/slope
+
+# ╔═╡ 865418d1-604f-4a40-b554-8e7ca8f31891
+intersection = (intersection_x,1024 - split_point_y)
+
+# ╔═╡ 70eaf027-93e3-4ca1-b430-f7d6f57a834f
+slope_counter = -1 / slope
+
+# ╔═╡ e1c9bc52-4a22-4e76-adc2-b7087b473b4c
+intercept_counter = intersection[2] - slope_counter*intersection[1]
+
+# ╔═╡ 563444e7-58f7-497a-b7ca-93a6e8086834
+begin
+	counter_split = plot(center_split, 
+	    1:1024, 
+	    1024 .-( (slope_counter .* (1:1024)) .+ intercept_counter), 
+	    color=:green, 
+	    linewidth=3,
+	)
+	scatter(counter_split,
+		   [intersection[1]],
+		   [1024 - intersection[2]],
+		   color=:purple,
+		   markersize=5)
+end
+
 # ╔═╡ Cell order:
 # ╠═0c3555e8-b38b-4278-bef0-03b77d2c3703
 # ╟─8801b0fe-af4d-11f0-170b-972b2cf4deaa
@@ -629,7 +732,6 @@ end
 # ╠═c4fae455-a6ee-4529-bd13-5f9c8b46f0ac
 # ╠═4ca03643-71b1-4e03-82c7-96b747b1ed73
 # ╠═a3b6e5b3-078d-47ef-893c-b7d953cd6472
-# ╠═74332993-cd2e-44b0-bab1-5824ba730a1b
 # ╠═668469d3-a55f-40f0-b54b-c2af31b8fdb1
 # ╠═2e62885a-f039-471a-9c85-5c1b5a9d5d1b
 # ╠═b5f97be8-28e5-46c4-9455-ac7ea2bb94c2
@@ -640,3 +742,22 @@ end
 # ╠═f1c52c9f-1e19-42e9-979d-5bfd9092c0bb
 # ╠═dafe943a-3ea5-4611-ba31-cb4abb2bf2c4
 # ╠═ed7af2cf-16a8-4bfa-9156-eb007cf801b8
+# ╟─ea20a110-ae10-4188-9d96-ddf904807ce1
+# ╠═e1f7516e-ffe3-4154-9713-e780c061147c
+# ╠═168b0cde-9143-4c36-b10b-c7926cc43b69
+# ╠═c720b949-c146-48de-9c7c-549386b218ea
+# ╠═3cbe8e0b-8e3d-4b62-8556-473ee83b33b1
+# ╠═5e8daff2-615d-4ff8-b50e-41bb1b5b5a5b
+# ╠═0d2fda19-808c-4b7a-961f-ba051251f1a2
+# ╠═6a05ecf8-8fa1-4b81-a252-e14703a72613
+# ╠═326e3135-0619-4648-b166-1face3fc38cb
+# ╠═dfebf2cd-1cdd-4840-a82e-fcf95f216a73
+# ╠═7879ec35-d891-46e5-85e6-ab8d8463a852
+# ╠═63fc5fe6-da82-40e1-bb08-9b7c96486958
+# ╠═dcb97d65-5546-438a-b776-d88fb7eab8cf
+# ╠═e4f937ff-3787-4fc2-96e3-fd842f8ed12c
+# ╠═274e74d4-ee91-462c-bd9f-f165a6025b43
+# ╠═865418d1-604f-4a40-b554-8e7ca8f31891
+# ╠═70eaf027-93e3-4ca1-b430-f7d6f57a834f
+# ╠═e1c9bc52-4a22-4e76-adc2-b7087b473b4c
+# ╠═563444e7-58f7-497a-b7ca-93a6e8086834
