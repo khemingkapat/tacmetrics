@@ -555,15 +555,12 @@ function get_center_location(df, round, side; tick=nothing, tick_index=nothing)
         return (NaN, NaN)
     end
 
-    # 2. Determine which tick to use
     target_df = if !isnothing(tick)
-        # Filter by specific tick value
         filter(:tick => t -> t == tick, side_df)
     elseif !isnothing(tick_index)
-        # Get unique ticks, sort them, and pick the Nth one
         unique_ticks = sort(unique(side_df.tick))
         if tick_index > length(unique_ticks) || tick_index < 1
-            return (NaN, NaN) # Index out of bounds
+            return (NaN, NaN)
         end
         chosen_tick = unique_ticks[tick_index]
         filter(:tick => t -> t == chosen_tick, side_df)
@@ -571,7 +568,6 @@ function get_center_location(df, round, side; tick=nothing, tick_index=nothing)
         error("You must provide either 'tick' or 'tick_index'")
     end
 
-    # 3. Calculate means
     if nrow(target_df) == 0
         return (NaN, NaN)
     end
@@ -660,6 +656,46 @@ begin
 		   color=:purple,
 		   markersize=5)
 end
+
+# ╔═╡ 2a7477d2-3b56-415d-a8e0-5b12f6adc32c
+function get_map_split_line(ct_start,t_start)
+	x_diff = abs(ct_start[1]-t_start[1])
+	y_diff = abs(ct_start[2]-t_start[2])
+
+
+	if x_diff > y_diff
+		horizontal = false
+		split_point = mean([ct_start[1],t_start[1]])
+	else
+		horizontal = true
+		split_point = mean([ct_start[2],t_start[2]])
+	end
+
+	if !horizontal
+		ct_start = reverse(ct_start)
+		t_start = reverse(t_start)
+	end
+	slope = (ct_start[2]-t_start[2])/(ct_start[1]-t_start[1])
+	intercept = ct_start[2] - slope*ct_start[1]
+	intersection_x = ((split_point) - intercept)/slope
+	intersection = (intersection_x,split_point)
+	slope_counter = -1 / slope
+	intercept_counter = intersection[2] - slope_counter*intersection[1]
+
+	result = (intercept_counter,slope_counter*1024 + intercept_counter)
+
+	return result
+
+end
+
+# ╔═╡ 2e1b6585-f9f3-486c-9451-eaa4508e6c5e
+get_map_split_line(ct_start,t_start)
+
+# ╔═╡ 65840577-8233-47dd-9cde-616e6663e233
+plot(bga,
+	 [0,1024],
+	 img_height .- collect(get_map_split_line(ct_start,t_start)),
+	 linewidth=3)
 
 # ╔═╡ Cell order:
 # ╠═0c3555e8-b38b-4278-bef0-03b77d2c3703
@@ -761,3 +797,6 @@ end
 # ╠═70eaf027-93e3-4ca1-b430-f7d6f57a834f
 # ╠═e1c9bc52-4a22-4e76-adc2-b7087b473b4c
 # ╠═563444e7-58f7-497a-b7ca-93a6e8086834
+# ╠═2a7477d2-3b56-415d-a8e0-5b12f6adc32c
+# ╠═2e1b6585-f9f3-486c-9451-eaa4508e6c5e
+# ╠═65840577-8233-47dd-9cde-616e6663e233
