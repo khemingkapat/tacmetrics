@@ -611,18 +611,18 @@ if x_diff > y_diff
 	split_point_x = mean([ct_start[1],t_start[1]])
 	vline(bga,[split_point_x],color=:red,linewidth=3)
 else
-	split_point_y = 1024-mean([ct_start[2],t_start[2]])
-	hline(bga,[split_point_y],color=:red,linewidth=3)
+	split_point_y = mean([ct_start[2],t_start[2]])
+	hline(bga,[img_height - split_point_y],color=:red,linewidth=3)
 end
 
 # ╔═╡ 7879ec35-d891-46e5-85e6-ab8d8463a852
 begin
 	center_dif = plot(bga,
 		[ct_start[1],t_start[1]],
-		1024 .- [ct_start[2],t_start[2]],
+		img_height .- [ct_start[2],t_start[2]],
 		color=:blue,
 		linewidth=3)
-	center_split = hline(center_dif,[split_point_y],color=:red,linewidth=3)
+	center_split = hline(center_dif,[img_height - split_point_y],color=:red,linewidth=3)
 end
 
 # ╔═╡ 63fc5fe6-da82-40e1-bb08-9b7c96486958
@@ -635,10 +635,10 @@ slope = (ct_start[2]-t_start[2])/(ct_start[1]-t_start[1])
 intercept = ct_start[2] - slope*ct_start[1]
 
 # ╔═╡ 274e74d4-ee91-462c-bd9f-f165a6025b43
-intersection_x = ((1024 - split_point_y) - intercept)/slope
+intersection_x = ((split_point_y) - intercept)/slope
 
 # ╔═╡ 865418d1-604f-4a40-b554-8e7ca8f31891
-intersection = (intersection_x,1024 - split_point_y)
+intersection = (intersection_x,split_point_y)
 
 # ╔═╡ 70eaf027-93e3-4ca1-b430-f7d6f57a834f
 slope_counter = -1 / slope
@@ -650,13 +650,13 @@ intercept_counter = intersection[2] - slope_counter*intersection[1]
 begin
 	counter_split = plot(center_split, 
 	    1:1024, 
-	    1024 .-( (slope_counter .* (1:1024)) .+ intercept_counter), 
+		img_height .- ((slope_counter .* (1:1024)) .+ intercept_counter), 
 	    color=:green, 
 	    linewidth=3,
 	)
 	scatter(counter_split,
 		   [intersection[1]],
-		   [1024 - intersection[2]],
+		   [img_height - intersection[2]],
 		   color=:purple,
 		   markersize=5)
 end
