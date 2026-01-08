@@ -30,7 +30,7 @@ The returned DataFrame includes the tick *before* the first move and the tick
 *after* the last move for a complete segment.
 """
 function trim_trajectory(df::AbstractDataFrame)
-    coords = select(df, Not(:tick))
+    coords = select(df, Cols(name -> endswith(lowercase(name), 'x') || endswith(lowercase(name), 'y')))
 
     mat = Matrix(coords)
     deltas = diff(mat, dims=1)
