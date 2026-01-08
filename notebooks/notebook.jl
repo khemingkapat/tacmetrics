@@ -51,7 +51,7 @@ md"# Map, Round and Side Selection"
 selected_map = "de_dust2"
 
 # ╔═╡ 17a61ab7-113d-4e4f-ac82-d4974141190d
-selected_round = 3
+selected_round = 4
 
 # ╔═╡ 01c0dddd-cbf2-4dc3-afab-5718e603d434
 selected_side = "t"
@@ -779,7 +779,12 @@ begin
 	        dist = euclidean_dist(row.X, row.Y, opp_row.X, opp_row.Y)
 	        
 	        if dist < proximity_threshold
-	            push!(to_delete, idx_opp)
+				if row.tick > opp_row.tick
+					push!(to_delete, idx_opp)
+				else
+					push!(to_delete,i)
+				end
+	            
 	        end
 	    end
 	end
@@ -795,12 +800,12 @@ begin
 	features = Matrix(using_df[:, [:X, :Y]])
 
 
-	model = svmtrain(features', labels, 
+	model = svmtrain(features', labels,
 	    kernel=LIBSVM.Kernel.Polynomial,    # Polynomial kernel → smooth curved boundary
 	    degree=3,                    # Try 2 (quadratic) or 3 (cubic)
 	    gamma=0.00002,                 # Low value for smoother boundary
 	    coef0=0.0,                   # Independent term
-	    cost=1e5)  
+	    cost=10.0)  
 	
 	predictions, decision_values = svmpredict(model, features')
 
@@ -810,13 +815,19 @@ begin
 	
 	# Create meshgrid
 	grid_points = hcat([[x, y] for x in x_grid for y in y_grid]...)
-	
-	# Predict on grid
 	grid_predictions, _ = svmpredict(model, grid_points)
-	Z = reshape(grid_predictions, length(y_grid), length(x_grid))
+	# Predict on grid
+	Z_new = reshape(grid_predictions, length(y_grid), length(x_grid))
+
+    if !@isdefined(Z_persistent)
+        global Z_persistent = copy(Z_new)
+    end
+
+    α = 0.5
+    Z_persistent .= (α .* Z_new) .+ ((1 - α) .* Z_persistent)
 	
 	# Plot decision boundary with flipped y-axis
-	svm_plot = contourf(bga,x_grid, img_height .- y_grid, Z, 
+	svm_plot = contourf(bga,x_grid, img_height .- y_grid, Z_persistent, 
 	    levels=[-1.5, 0, 1.5],
 	    color=:RdBu,
 	    alpha=0.3,
@@ -829,7 +840,7 @@ begin
 	    ylims=(0, img_height))
 	
 	# Add decision boundary line with flipped y-axis
-	contour!(x_grid, img_height .- y_grid, Z, 
+	contour!(x_grid, img_height .- y_grid, Z_persistent, 
 	    levels=[0],
 	    color=:black,
 	    linewidth=2,
