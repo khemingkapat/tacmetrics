@@ -4,6 +4,18 @@
 using Markdown
 using InteractiveUtils
 
+# This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
+macro bind(def, element)
+    #! format: off
+    return quote
+        local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
+        local el = $(esc(element))
+        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
+        el
+    end
+    #! format: on
+end
+
 # ╔═╡ 0c3555e8-b38b-4278-bef0-03b77d2c3703
 begin
     import Pkg
@@ -20,6 +32,9 @@ end
 
 # ╔═╡ 0fcc12e8-0e8d-45e7-b22f-025e905536da
 using Clustering
+
+# ╔═╡ f227bf23-0a9c-4828-9aa0-07f8bc22445a
+using PlutoUI
 
 # ╔═╡ 8801b0fe-af4d-11f0-170b-972b2cf4deaa
 md"""
@@ -425,52 +440,10 @@ clustered_grouped_df = combine(groupby(clustered_df, :tick),
     group_df -> TacMetrics.calculate_cluster_features(group_df))
 
 # ╔═╡ cefa35b3-bf3b-450d-8c4a-79935f2576a8
+# ╠═╡ disabled = true
+#=╠═╡
   ticks = unique(clustered_df.tick)
-
-# ╔═╡ 5e3a45a7-2c7b-4691-b6ca-cc9e50df7dd8
-begin
-    x_coords = zeros(nv(cluster_graph))
-    y_coords = zeros(nv(cluster_graph))
-    sizes = zeros(nv(cluster_graph))
-    # We will store the labels as strings here
-    node_labels = Vector{String}(undef, nv(cluster_graph)) 
-    
-    index_map = Dict((row.tick, row.cluster) => row.size for row in eachrow(clustered_grouped_df))
-    
-    for i in 1:nv(cluster_graph)
-        tick, cluster_num = id_to_node[i]
-        
-        x_coords[i] = tick
-        y_coords[i] = cluster_num
-
-        current_size = index_map[(ticks[tick], cluster_num)]
-        sizes[i] = current_size
-        
-        # Create the string label for the node
-        node_labels[i] = string(current_size)
-    end
-
-	for e in edges(cluster_graph)
-    	s = src(e)      # Get source vertex
-    	d = dst(e)      # Get destination vertex
-    	w = weight(e)   # Get edge weight
-	end
-
-	
-    graphplot(cluster_graph, 
-              x = x_coords*2, 
-              y = y_coords*5, 
-              names = node_labels,
-              edgelabel = Int.(weights(cluster_graph)),    # <--- This adds labels to the lines
-              edgelabel_offset = 0.05,     # Moves text slightly so it doesn't overlap line
-              fontsize = 8,
-              nodesize = 2,
-              linealpha = 0.6,             # Lower alpha helps see labels better
-              curves = false, 
-              xlabel = "Tick",
-              ylabel = "Cluster Number",
-              title = "Cluster Transitions Over Time")
-end
+  ╠═╡ =#
 
 # ╔═╡ f1c52c9f-1e19-42e9-979d-5bfd9092c0bb
 nv(cluster_graph) == length(clustered_grouped_df.centroid_x) == length(clustered_grouped_df.centroid_y)
@@ -545,7 +518,10 @@ md"
 "
 
 # ╔═╡ e1f7516e-ffe3-4154-9713-e780c061147c
-transformed_all_df = TacMetrics.transform_coord(map_data,df,x_col=:X,y_col=:Y)
+old_transformed_all_df = TacMetrics.transform_coord(map_data,df,x_col=:X,y_col=:Y)
+
+# ╔═╡ 77a282a9-8058-41f0-a617-30fb17bb381a
+transformed_all_df = filter(:health => h -> h > 0,old_transformed_all_df)
 
 # ╔═╡ 168b0cde-9143-4c36-b10b-c7926cc43b69
 function get_center_location(df, round, side; tick=nothing, tick_index=nothing)
@@ -576,7 +552,7 @@ function get_center_location(df, round, side; tick=nothing, tick_index=nothing)
 end
 
 # ╔═╡ c720b949-c146-48de-9c7c-549386b218ea
-ct_start = get_center_location(transformed_all_df,selected_round,"ct",tick_index=2)
+ct_start = get_center_location(transformed_all_df,selected_round,"ct",tick_index=1)
 
 # ╔═╡ 3cbe8e0b-8e3d-4b62-8556-473ee83b33b1
 t_start = get_center_location(transformed_all_df,selected_round,"t",tick_index=1)
@@ -692,10 +668,193 @@ end
 get_map_split_line(ct_start,t_start)
 
 # ╔═╡ 65840577-8233-47dd-9cde-616e6663e233
-plot(bga,
+bg_splitted = plot(bga,
 	 [0,1024],
 	 img_height .- collect(get_map_split_line(ct_start,t_start)),
 	 linewidth=3)
+
+# ╔═╡ 683a7396-8254-4109-ad0b-ac775fb2881a
+# ╠═╡ disabled = true
+#=╠═╡
+ticks = collect(unique(selected_df.tick))[1:100:end]
+  ╠═╡ =#
+
+# ╔═╡ b5dc8fc4-7b98-42f2-a1b4-ecce9df9eb1e
+selected_all_df = filter(:round_num => r -> r == selected_round,transformed_all_df)
+
+# ╔═╡ 8742eed2-ada6-48c9-abc5-f11522dfe761
+ticks = unique(selected_all_df.tick)[1:50:end]
+
+# ╔═╡ 5e3a45a7-2c7b-4691-b6ca-cc9e50df7dd8
+begin
+    x_coords = zeros(nv(cluster_graph))
+    y_coords = zeros(nv(cluster_graph))
+    sizes = zeros(nv(cluster_graph))
+    # We will store the labels as strings here
+    node_labels = Vector{String}(undef, nv(cluster_graph)) 
+    
+    index_map = Dict((row.tick, row.cluster) => row.size for row in eachrow(clustered_grouped_df))
+    
+    for i in 1:nv(cluster_graph)
+        tick, cluster_num = id_to_node[i]
+        
+        x_coords[i] = tick
+        y_coords[i] = cluster_num
+
+        current_size = index_map[(ticks[tick], cluster_num)]
+        sizes[i] = current_size
+        
+        # Create the string label for the node
+        node_labels[i] = string(current_size)
+    end
+
+	for e in edges(cluster_graph)
+    	s = src(e)      # Get source vertex
+    	d = dst(e)      # Get destination vertex
+    	w = weight(e)   # Get edge weight
+	end
+
+	
+    graphplot(cluster_graph, 
+              x = x_coords*2, 
+              y = y_coords*5, 
+              names = node_labels,
+              edgelabel = Int.(weights(cluster_graph)),    # <--- This adds labels to the lines
+              edgelabel_offset = 0.05,     # Moves text slightly so it doesn't overlap line
+              fontsize = 8,
+              nodesize = 2,
+              linealpha = 0.6,             # Lower alpha helps see labels better
+              curves = false, 
+              xlabel = "Tick",
+              ylabel = "Cluster Number",
+              title = "Cluster Transitions Over Time")
+end
+
+# ╔═╡ 012ef0d3-9c04-40d5-a8a2-eadbbe4b1430
+@bind tick_index Slider(1:length(ticks))
+
+# ╔═╡ 001ee9d1-31e7-425a-9f0c-17f5d89743d3
+tick_selected_all_df = filter(:tick => t -> t == ticks[tick_index],selected_all_df)
+
+# ╔═╡ 21406825-421f-4265-b5a6-71303cc08ef9
+scatter(bg_splitted,
+    tick_selected_all_df.X, 
+    1024 .-tick_selected_all_df.Y, 
+    group = tick_selected_all_df.side,   # This automatically colors by "ct" vs "t"
+    xlabel = "X Coordinate",
+    ylabel = "Y Coordinate",
+    title = "Player Positions at Tick $(ticks[tick_index])",
+    markersize = 5,
+    alpha = 0.8,
+    legend = :outertopright
+)
+
+# ╔═╡ 68fecb42-502c-485d-bef7-00eb450f58dd
+prev_tick_all_df = filter(:tick => t -> (t <= ticks[tick_index]) && (t in ticks),selected_all_df)
+
+# ╔═╡ aa688825-4b5e-4a9f-93b0-7512472e7316
+proximity_threshold=20
+
+# ╔═╡ 1af9f990-a275-4243-ac5f-4e138cf2c9eb
+euclidean_dist(x1, y1, x2, y2) = sqrt((x2 - x1)^2 + (y2 - y1)^2)
+
+# ╔═╡ ae6c41f8-5a3c-4bf4-a0b3-96d716594f7c
+begin
+	to_delete = Set{Int}()
+	
+	for (i, row) in enumerate(eachrow(prev_tick_all_df))
+	    if i in to_delete
+	        continue
+	    end
+	
+	    opp_df = filter(:side => s -> s != row.side, prev_tick_all_df)
+	    
+	    for opp_row in eachrow(opp_df)
+	        idx_opp = rownumber(opp_row)
+	        
+	        if idx_opp in to_delete
+	            continue
+	        end
+	
+	        dist = euclidean_dist(row.X, row.Y, opp_row.X, opp_row.Y)
+	        
+	        if dist < proximity_threshold
+	            push!(to_delete, idx_opp)
+	        end
+	    end
+	end
+	
+	filtered_prev_tick_all_df = prev_tick_all_df[.!in.(1:nrow(prev_tick_all_df), Ref(to_delete)), :]
+end
+
+# ╔═╡ dd38a9b2-c5dd-4fd6-8290-283c5302ab3b
+begin
+	using LIBSVM
+	using_df = filtered_prev_tick_all_df
+	labels = [r.side == "ct" ? 1.0 : -1.0 for r in eachrow(using_df)]
+	features = Matrix(using_df[:, [:X, :Y]])
+
+
+	model = svmtrain(features', labels, 
+	    kernel=LIBSVM.Kernel.Polynomial,    # Polynomial kernel → smooth curved boundary
+	    degree=3,                    # Try 2 (quadratic) or 3 (cubic)
+	    gamma=0.00002,                 # Low value for smoother boundary
+	    coef0=0.0,                   # Independent term
+	    cost=1e5)  
+	
+	predictions, decision_values = svmpredict(model, features')
+
+	
+	x_grid = range(0, img_width, length=300)
+	y_grid = 1024 .- range(0, img_height, length=300)
+	
+	# Create meshgrid
+	grid_points = hcat([[x, y] for x in x_grid for y in y_grid]...)
+	
+	# Predict on grid
+	grid_predictions, _ = svmpredict(model, grid_points)
+	Z = reshape(grid_predictions, length(y_grid), length(x_grid))
+	
+	# Plot decision boundary with flipped y-axis
+	svm_plot = contourf(bga,x_grid, img_height .- y_grid, Z, 
+	    levels=[-1.5, 0, 1.5],
+	    color=:RdBu,
+	    alpha=0.3,
+	    colorbar=false,
+	    xlabel="X Position",
+	    ylabel="Y Position",
+	    title="SVM Decision Boundary - CS2 Map",
+	    aspect_ratio=:equal,
+	    xlims=(0, img_width),
+	    ylims=(0, img_height))
+	
+	# Add decision boundary line with flipped y-axis
+	contour!(x_grid, img_height .- y_grid, Z, 
+	    levels=[0],
+	    color=:black,
+	    linewidth=2,
+	    linestyle=:solid,
+	    label="Decision Boundary")
+	
+	# Plot data points with flipped y-axis
+	ct_mask = labels .== 1.0
+	t_mask = labels .== -1.0
+	
+	scatter!(features[ct_mask, 1], img_height .- features[ct_mask, 2],
+	    label="CT",
+	    color=:blue,
+	    markersize=4,
+	    markerstrokewidth=0.5)
+	
+	scatter!(features[t_mask, 1], img_height .- features[t_mask, 2],
+	    label="T",
+	    color=:red,
+	    markersize=4,
+	    markerstrokewidth=0.5)
+end
+
+# ╔═╡ 99f5645d-194a-45f3-bd7e-dfd8919fdf5f
+
 
 # ╔═╡ Cell order:
 # ╠═0c3555e8-b38b-4278-bef0-03b77d2c3703
@@ -780,6 +939,7 @@ plot(bga,
 # ╠═ed7af2cf-16a8-4bfa-9156-eb007cf801b8
 # ╟─ea20a110-ae10-4188-9d96-ddf904807ce1
 # ╠═e1f7516e-ffe3-4154-9713-e780c061147c
+# ╠═77a282a9-8058-41f0-a617-30fb17bb381a
 # ╠═168b0cde-9143-4c36-b10b-c7926cc43b69
 # ╠═c720b949-c146-48de-9c7c-549386b218ea
 # ╠═3cbe8e0b-8e3d-4b62-8556-473ee83b33b1
@@ -800,3 +960,16 @@ plot(bga,
 # ╠═2a7477d2-3b56-415d-a8e0-5b12f6adc32c
 # ╠═2e1b6585-f9f3-486c-9451-eaa4508e6c5e
 # ╠═65840577-8233-47dd-9cde-616e6663e233
+# ╠═683a7396-8254-4109-ad0b-ac775fb2881a
+# ╠═b5dc8fc4-7b98-42f2-a1b4-ecce9df9eb1e
+# ╠═8742eed2-ada6-48c9-abc5-f11522dfe761
+# ╠═f227bf23-0a9c-4828-9aa0-07f8bc22445a
+# ╠═012ef0d3-9c04-40d5-a8a2-eadbbe4b1430
+# ╠═001ee9d1-31e7-425a-9f0c-17f5d89743d3
+# ╠═21406825-421f-4265-b5a6-71303cc08ef9
+# ╠═68fecb42-502c-485d-bef7-00eb450f58dd
+# ╠═aa688825-4b5e-4a9f-93b0-7512472e7316
+# ╠═1af9f990-a275-4243-ac5f-4e138cf2c9eb
+# ╠═ae6c41f8-5a3c-4bf4-a0b3-96d716594f7c
+# ╠═dd38a9b2-c5dd-4fd6-8290-283c5302ab3b
+# ╠═99f5645d-194a-45f3-bd7e-dfd8919fdf5f
